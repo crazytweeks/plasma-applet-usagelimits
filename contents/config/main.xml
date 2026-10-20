@@ -50,5 +50,13 @@
             <label>Show the Z.ai provider</label>
             <default>true</default>
         </entry>
+        <entry name="showAntigravity" type="Bool">
+            <label>Show the Google Antigravity provider</label>
+            <default>true</default>
+        </entry>
+        <entry name="showCommandcode" type="Bool">
+            <label>Show the Command Code provider</label>
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

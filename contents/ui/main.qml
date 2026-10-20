@@ -34,6 +34,8 @@ PlasmoidItem {
         flags["codex"] = plasmoid.configuration.showCodex
         flags["opencode"] = plasmoid.configuration.showOpencode
         flags["zai"] = plasmoid.configuration.showZai
+        flags["antigravity"] = plasmoid.configuration.showAntigravity
+        flags["commandcode"] = plasmoid.configuration.showCommandcode
         return flags
     }
 
@@ -222,16 +224,16 @@ PlasmoidItem {
     }
 
     // --- Widget setup ---
-    // Panel hover tooltip via Plasma's native tooltip system — QQC2.ToolTip
-    // on the compact representation blinks on panels, this one does not.
+    // Panel hover tooltip via Plasma's native tooltip system — plain text
+    // only: toolTipSubText is rendered literally, no rich text here.
     readonly property string tooltipSummary: {
         var parts = []
         var rows = root.limitRows
         for (var i = 0; i < rows.length; i++) {
-            parts.push("<b>" + rows[i].provider + "</b> " + rows[i].label + " — " + Math.round(rows[i].util) + "%")
+            parts.push(rows[i].provider + " " + rows[i].label + " — " + Math.round(rows[i].util) + "%")
         }
         if (root.hasError || parts.length === 0) return ""
-        return parts.join("<br>")
+        return parts.join("\n")
     }
 
     toolTipMainText: root.hasError ? "" : "AI plan usage"

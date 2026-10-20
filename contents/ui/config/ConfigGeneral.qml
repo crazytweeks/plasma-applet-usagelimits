@@ -17,6 +17,8 @@ KCM.SimpleKCM {
     property alias cfg_showCodex: showCodexBox.checked
     property alias cfg_showOpencode: showOpencodeBox.checked
     property alias cfg_showZai: showZaiBox.checked
+    property alias cfg_showAntigravity: showAntigravityBox.checked
+    property alias cfg_showCommandcode: showCommandcodeBox.checked
     property string cfg_normalColor
     property string cfg_warningColor
 
@@ -130,6 +132,18 @@ KCM.SimpleKCM {
             id: showZaiBox
             Kirigami.FormData.label: "Z.ai:"
             text: "Show Z.ai (GLM Coding Plan) usage"
+        }
+
+        QQC2.CheckBox {
+            id: showAntigravityBox
+            Kirigami.FormData.label: "Antigravity:"
+            text: "Show Google Antigravity usage"
+        }
+
+        QQC2.CheckBox {
+            id: showCommandcodeBox
+            Kirigami.FormData.label: "Command Code:"
+            text: "Show Command Code credits and limits"
         }
 
         Kirigami.Separator {

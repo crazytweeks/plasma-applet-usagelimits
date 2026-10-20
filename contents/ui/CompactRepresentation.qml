@@ -17,7 +17,8 @@ MouseArea {
 
     // Distinct glyphs: initials alone would collide (Claude / Codex both "C").
     function glyph(p) {
-        var map = { "claude": "C", "codex": "X", "opencode": "G", "zai": "Z" }
+        var map = { "claude": "C", "codex": "X", "opencode": "G", "zai": "Z",
+                    "antigravity": "A", "commandcode": "◆" }
         var g = p && p.id ? map[p.id] : undefined
         return g ? g : (p && p.name ? p.name.charAt(0).toUpperCase() : "?")
     }

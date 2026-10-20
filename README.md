@@ -1,12 +1,12 @@
 # Usage Limits
 
-A KDE Plasma 6 panel widget that monitors the subscription usage of four AI
+A KDE Plasma 6 panel widget that monitors the subscription usage of six AI
 CLIs at once: **Claude Code**, **OpenAI Codex (ChatGPT plan)**, **OpenCode Go**,
-and **Z.ai (GLM Coding Plan)**.
+**Z.ai (GLM Coding Plan)**, **Google Antigravity**, and **Command Code**.
 
 ## Features
 
-- All four providers in one widget; each can be shown or hidden in settings
+- All six providers in one widget; each can be shown or hidden in settings
 - Whatever windows each provider reports: 5-hour, weekly, monthly, credits
 - Three-ish panel styles for different panel sizes and seven in total:
   **rings** (round gauge per provider), **glow** (chip brightness = usage),
@@ -31,10 +31,19 @@ provider's own usage endpoint. Nothing is sent anywhere else.
 | Codex | `~/.codex/auth.json` (auto-refreshes the token) | `chatgpt.com/backend-api/wham/usage` |
 | OpenCode Go | `~/.local/share/opencode/auth.json` (`opencode-go` key) | `opencode.ai/zen/go/v1/usage` |
 | Z.ai | API key: `~/.config/usagelimits/zai-api-key`, `Z_AI_API_KEY`, or your opencode config | `api.z.ai/api/monitor/usage/quota/limit` |
+| Antigravity | Google OAuth: found automatically (T3 / `agy` logins, `~/.codexbar`), or an explicit file `~/.config/usagelimits/antigravity-oauth.json` | `daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary` (+ `retrieveUserQuota` fallback) |
+| Command Code | `cmd login` (`~/.commandcode/auth.json`), `COMMAND_CODE_API_KEY`, or a `user_...` key in `~/.config/usagelimits/commandcode-api-key` | `api.commandcode.ai/alpha/billing/credits` (+ `/billing/subscriptions`) |
 
 If a provider isn't signed in, its row says so instead of failing silently.
-Sign in with `claude` / `codex` / `opencode /connect` in a terminal; for
-Z.ai save an API key to `~/.config/usagelimits/zai-api-key`.
+Sign in with `claude` / `codex` / `opencode /connect` / `agy` / `cmd login` in
+a terminal; for Z.ai save an API key to `~/.config/usagelimits/zai-api-key`.
+
+Antigravity notes: the widget reads your Google subscription quota
+weekly + 5-hour limits for both model families the CLI shows, plus the
+per-model 5-hour window. Only remote OAuth endpoints are used — keep the Antigravity
+app signed in if you also use it locally. The Gemini *weekly* allowance is not
+exposed by the remote endpoints and may be absent; the other three windows are
+always reported.
 
 > These widgets use internal endpoints that are not public, documented APIs.
 > They may change or stop working without notice.
@@ -64,7 +73,7 @@ kpackagetool6 -t Plasma/Applet -r com.bhuvan.usagelimits
 
 Right-click the widget and choose **Configure...**:
 
-- **Providers** — show/hide each of the four individually
+- **Providers** — show/hide each of the six individually
 - **Panel style** — rings / glow / capsule / dots / bars / letters+percentages /
   worst-pill, sized for anything from thin vertical panels to wide panels
 - **Color theme** — presets (Warm, Sunset, Nord, Mono) or fully custom colors

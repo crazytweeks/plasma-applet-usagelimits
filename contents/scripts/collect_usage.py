@@ -2,8 +2,9 @@
 """Collect AI subscription usage limits from every provider signed in locally.
 
 Providers: Claude Code, OpenAI Codex (ChatGPT plan), OpenCode Go, Z.ai GLM
-Coding Plan. Each one's credentials are read from where its CLI already
-stores them; nothing is sent anywhere except the provider's own endpoint.
+Coding Plan, Google Antigravity, Command Code. Each one's credentials are
+read from where its CLI already stores them; nothing is sent anywhere
+except the provider's own endpoint.
 
 Prints one JSON object on stdout and always exits 0:
 {
@@ -22,10 +23,13 @@ that worked recently keeps serving its cached payload (marked "cached")
 until a fetch succeeds again.
 """
 
+import datetime
+import glob
 import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HOME = os.path.expanduser("~")
@@ -40,6 +44,10 @@ CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 CLAUDE_OAUTH_BETA = "oauth-2025-04-20"
 OPENCODE_USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
 ZAI_QUOTA_URL = "https://api.z.ai/api/monitor/usage/quota/limit"
+ANTIGRAVITY_TOKEN_URL = "https://oauth2.googleapis.com/token"
+ANTIGRAVITY_API_BASE = "https://daily-cloudcode-pa.googleapis.com/v1internal"
+ANTIGRAVITY_HUB_UA = "antigravity/hub/2.9.1/linux/amd64"
+COMMANDCODE_BASE = "https://api.commandcode.ai/alpha"
 
 
 def http_json(url, headers, timeout=REQUEST_TIMEOUT):
@@ -430,6 +438,343 @@ def collect_zai():
     return {"state": "ok", "detail": str(plan), "windows": windows}
 
 
+# --- Google Antigravity -----------------------------------------------------
+
+def antigravity_oauth_file():
+    """Antigravity OAuth credentials ({client_id, client_secret, refresh_token,
+    project_id}), wherever they live on this machine."""
+    override = os.path.join(HOME, ".config/usagelimits/antigravity-oauth.json")
+    for path in (override,
+                 os.path.join(HOME, ".codexbar/antigravity/oauth_creds.json")):
+        creds = load_json(path)
+        if isinstance(creds, dict) and creds.get("refresh_token"):
+            return creds
+    # T3 Code stores the token used by its embedded Antigravity CLI here.
+    for path in glob.glob(os.path.join(
+            HOME, ".t3/userdata/providers/antigravity/*/antigravity-acp/acp_token.json")):
+        creds = load_json(path)
+        if isinstance(creds, dict) and creds.get("refresh_token"):
+            return creds
+    return None
+
+
+def antigravity_access_token(creds):
+    body = urllib.parse.urlencode({
+        "client_id": creds["client_id"],
+        "client_secret": creds["client_secret"],
+        "refresh_token": creds["refresh_token"],
+        "grant_type": "refresh_token",
+    }).encode()
+    req = urllib.request.Request(
+        ANTIGRAVITY_TOKEN_URL, data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded",
+                 "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+        payload = json.load(resp)
+    access = payload.get("access_token")
+    return access if isinstance(access, str) and access else None
+
+
+def antigravity_post(bearer, method, body):
+    req = urllib.request.Request(
+        f"{ANTIGRAVITY_API_BASE}:{method}",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": "Bearer " + bearer,
+                 "Content-Type": "application/json",
+                 "User-Agent": ANTIGRAVITY_HUB_UA})
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+        return json.load(resp)
+
+
+def antigravity_group_label(name):
+    lowered = str(name).lower()
+    if "gemini" in lowered:
+        return "Gemini"
+    if "claude" in lowered or "gpt" in lowered:
+        return "Claude/GPT"
+    return str(name)
+
+
+def antigravity_bucket_label(name):
+    lowered = str(name).lower()
+    if "weekly" in lowered:
+        return "Weekly"
+    if "five" in lowered or "5h" in lowered:
+        return "5h"
+    return None  # unknown cadence, not a headline window
+
+
+def antigravity_model_family(model_id):
+    lowered = str(model_id).lower()
+    if lowered.startswith("gemini"):
+        return "Gemini"
+    if lowered.startswith(("claude", "gpt", "chat_")):
+        return "Claude/GPT"
+    return None
+
+
+def antigravity_windows(summary, per_model, now_epoch):
+    windows = []
+
+    # Preferred: quota summary — named groups with weekly/5h buckets.
+    for group in (summary or {}).get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        family = antigravity_group_label(group.get("displayName") or "")
+        for bucket in group.get("buckets") or []:
+            if not isinstance(bucket, dict):
+                continue
+            cadence = antigravity_bucket_label(bucket.get("displayName")
+                                               or bucket.get("bucketId") or "")
+            if cadence is None:
+                continue
+            remaining = bucket.get("remainingFraction")
+            if not isinstance(remaining, (int, float)):
+                continue
+            label = f"{family} {cadence}"
+            windows.append(window(
+                f"ag_{len(windows)}", label, (1.0 - remaining) * 100.0,
+                antigravity_reset_iso(bucket.get("resetTime"))))
+
+    # Fallback fill: per-model buckets, clustered by remaining + reset.
+    if per_model and isinstance(per_model.get("buckets"), list):
+        clusters = {}
+        for bucket in per_model["buckets"]:
+            if not isinstance(bucket, dict):
+                continue
+            family = antigravity_model_family(bucket.get("modelId") or "")
+            if family is None:
+                continue
+            reset = antigravity_reset_iso(bucket.get("resetTime"))
+            key = (family, reset)
+            if key not in clusters:
+                clusters[key] = 1.0
+            remaining = bucket.get("remainingFraction")
+            if isinstance(remaining, (int, float)) and remaining < clusters[key]:
+                clusters[key] = remaining
+        for (family, reset), remaining in clusters.items():
+            if reset is None:
+                continue  # no reset timestamp → unknown cadence, skip
+            cadence = "5h" if hours_until(reset, now_epoch) <= 6 else "Weekly"
+            label = f"{family} {cadence}"
+            if any(w["label"] == label for w in windows):
+                continue  # the summary already covers this window
+            windows.append(window(f"ag_{len(windows)}", label,
+                                  (1.0 - remaining) * 100.0, reset))
+
+    # Deduplicate, keeping the tightest (most used) entry per label.
+    best = {}
+    for w in windows:
+        old = best.get(w["label"])
+        if old is None or w["percent"] > old["percent"]:
+            best[w["label"]] = w
+    return [best[label] for label in sorted(best)]
+
+
+def antigravity_reset_iso(value):
+    if not isinstance(value, str) or not value:
+        return ""
+    try:
+        stamp = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return stamp.astimezone(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S+00:00")
+    except ValueError:
+        return ""
+
+
+def hours_until(iso, now_epoch):
+    try:
+        stamp = datetime.datetime.strptime(
+            iso.split("+")[0], "%Y-%m-%dT%H:%M:%S")
+        epoch = stamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+        return (epoch - now_epoch) / 3600.0
+    except ValueError:
+        return 1e9
+
+
+def collect_antigravity():
+    creds = antigravity_oauth_file()
+    if not creds:
+        return {"state": "unauthenticated",
+                "detail": ("No Antigravity login. Save the OAuth client file in "
+                           "~/.config/usagelimits/antigravity-oauth.json, or sign "
+                           "in once with: agy (Antigravity / Google account)")}
+
+    try:
+        bearer = antigravity_access_token(creds)
+    except Exception:
+        return {"state": "token_expired",
+                "detail": "Antigravity token refresh failed; sign in again (agy)"}
+    if not bearer:
+        return {"state": "token_expired",
+                "detail": "Antigravity token refresh returned no access token"}
+
+    project = creds.get("project_id") or ""
+    try:
+        summary = antigravity_post(bearer, "retrieveUserQuotaSummary",
+                                   {"project": project})
+        if not isinstance(summary, dict):
+            summary = {}
+    except Exception:
+        summary = {}
+
+    try:
+        per_model = antigravity_post(bearer, "retrieveUserQuota",
+                                     {"project": project})
+    except Exception:
+        per_model = None
+
+    windows = antigravity_windows(summary, per_model, time.time())
+    if not windows:
+        return {"state": "error",
+                "detail": ("Antigravity answered but reported no quota windows "
+                           "(OAuth access may be denied for this account)")}
+    return {"state": "ok", "detail": "Google Antigravity", "windows": windows}
+
+
+# --- Command Code -----------------------------------------------------------
+
+def commandcode_api_key():
+    # 1. environment, 2. explicit file, 3. the cmd CLI's login file.
+    if os.environ.get("COMMAND_CODE_API_KEY"):
+        return os.environ["COMMAND_CODE_API_KEY"]
+    key_file = os.path.join(HOME, ".config/usagelimits/commandcode-api-key")
+    if os.path.isfile(key_file):
+        try:
+            with open(key_file) as f:
+                key = f.read().strip()
+            if key:
+                return key
+        except OSError:
+            pass
+    auth = load_json(os.path.join(HOME, ".commandcode/auth.json"))
+    if isinstance(auth, dict):
+        found = []
+
+        def scan(value):
+            if isinstance(value, str) and value.startswith("user_"):
+                found.append(value)
+            elif isinstance(value, dict):
+                for inner in value.values():
+                    scan(inner)
+            elif isinstance(value, list):
+                for inner in value:
+                    scan(inner)
+
+        scan(auth)
+        if found:
+            return found[0]
+    return None
+
+
+def commandcode_reset_iso(value):
+    if isinstance(value, (int, float)):
+        return iso_from_epoch(value)
+    if isinstance(value, str) and value:
+        return antigravity_reset_iso(value)
+    return ""
+
+
+def commandcode_percent(raw):
+    if not isinstance(raw, dict):
+        return None, ""
+    try:
+        cap = float(raw.get("cap") or 0)
+    except (TypeError, ValueError):
+        return None, ""
+    if cap <= 0:
+        return None, ""
+    try:
+        used = float(raw.get("used") or 0)
+    except (TypeError, ValueError):
+        used = 0.0
+    return min(100.0, max(0.0, used / cap * 100.0)), commandcode_reset_iso(
+        raw.get("resetAt"))
+
+
+# Plan catalog from https://commandcode.ai/pricing (planId → monthly credits).
+COMMANDCODE_PLANS = {
+    "individual-go": ("Go", 10.0),
+    "individual-go-v1": ("Go", 10.0),
+    "individual-goat": ("GOAT", 70.0),
+    "individual-pro": ("Pro", 30.0),
+    "individual-pro-v1": ("Pro", 80.0),
+    "individual-max": ("Max", 150.0),
+    "individual-ultra": ("Ultra", 300.0),
+}
+
+
+def collect_commandcode():
+    key = commandcode_api_key()
+    if not key:
+        return {"state": "unauthenticated",
+                "detail": ("No Command Code key. Run: cmd login, or save a "
+                           "user_... API key in "
+                           "~/.config/usagelimits/commandcode-api-key")}
+
+    status, data, _ = http_json(f"{COMMANDCODE_BASE}/billing/credits", {
+        "Authorization": "Bearer " + key,
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+    })
+    if status == 0:
+        return {"state": "error", "detail": "Could not reach api.commandcode.ai"}
+    if status == 429:
+        return {"state": "rate_limited", "detail": "api.commandcode.ai is rate-limiting"}
+    if status in (401, 403):
+        return {"state": "unauthenticated", "detail": "Command Code key rejected"}
+    if status != 200 or not isinstance(data, dict):
+        return {"state": "error", "detail": f"Command Code returned HTTP {status}"}
+
+    credits = data.get("credits")
+    if not isinstance(credits, dict) or "monthlyCredits" not in credits:
+        return {"state": "error", "detail": "Command Code returned no credits object"}
+
+    limit_source = data.get("windowLimits")
+    if not isinstance(limit_source, dict):
+        limit_source = credits.get("windowLimits")
+    if not isinstance(limit_source, dict):
+        limit_source = {}
+
+    windows = []
+    for id_, raw_key, label in (("five_hour", "fiveHour", "5h"),
+                                ("weekly", "weekly", "Weekly")):
+        percent, reset = commandcode_percent(limit_source.get(raw_key))
+        if percent is not None:
+            windows.append(window(id_, label, percent, reset))
+
+    # Monthly credit pool: percent of the grant consumed. The credits
+    # response only reports what is left, so the grant comes from the plan
+    # catalog via the subscriptions lookup (public pricing page values).
+    remaining = credits.get("monthlyCredits")
+    granted = None
+    plan_name = "Command Code"
+    try:
+        status, sub, _ = http_json(f"{COMMANDCODE_BASE}/billing/subscriptions", {
+            "Authorization": "Bearer " + key,
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        })
+        if status == 200 and isinstance(sub, dict) and sub.get("success"):
+            payload = sub.get("data")
+            if isinstance(payload, dict):
+                plan_id = str(payload.get("planId") or "").lower()
+                if plan_id in COMMANDCODE_PLANS:
+                    plan_name, granted = COMMANDCODE_PLANS[plan_id]
+    except Exception:
+        pass
+
+    if isinstance(granted, (int, float)) and isinstance(remaining, (int, float)) \
+            and granted > 0:
+        used_pct = min(100.0, max(0.0, (granted - remaining) / granted * 100.0))
+        windows.append(window("credits", "Credits", used_pct, ""))
+
+    if not windows:
+        return {"state": "error",
+                "detail": "Command Code returned no readable windows"}
+    return {"state": "ok", "detail": plan_name, "windows": windows}
+
+
 # --- Assembly ---------------------------------------------------------------
 
 PROVIDERS = (
@@ -437,6 +782,8 @@ PROVIDERS = (
     ("codex", "Codex", collect_codex),
     ("opencode", "OpenCode Go", collect_opencode),
     ("zai", "Z.ai", collect_zai),
+    ("antigravity", "Antigravity", collect_antigravity),
+    ("commandcode", "Command Code", collect_commandcode),
 )
 
 
