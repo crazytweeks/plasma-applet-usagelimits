@@ -2,7 +2,7 @@
 # Install or update Usage Limits in the local Plasma session.
 set -euo pipefail
 
-WIDGET_ID="com.bhuvan.usagelimits"
+WIDGET_ID="com.crazytweeks.usagelimits"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 chmod +x "$SCRIPT_DIR/contents/scripts/collect_usage.py"

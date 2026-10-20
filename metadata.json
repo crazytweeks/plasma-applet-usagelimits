@@ -1,7 +1,7 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Id": "com.bhuvan.usagelimits",
+        "Id": "com.crazytweeks.usagelimits",
         "Name": "Usage Limits",
         "Description": "Claude, Codex, OpenCode Go, Z.ai, Antigravity and Command Code usage limits in your Plasma panel",
         "Icon": "view-statistics",

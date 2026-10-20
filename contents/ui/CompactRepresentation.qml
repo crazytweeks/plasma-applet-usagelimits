@@ -439,7 +439,7 @@ MouseArea {
                                     return Math.round(singleGroup.util) + "%"
                                 }
                                 color: Kirigami.Theme.textColor
-                                font.pixelSize: Math.max(7, Math.round(parent.width * 0.25))
+                                font.pixelSize: Math.max(6, Math.round(parent.width * (root.gaugeLabel === "time" ? 0.18 : 0.23)))
                                 font.bold: root.gaugeLabel === "glyph"
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter

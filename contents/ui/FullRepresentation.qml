@@ -13,7 +13,7 @@ Item {
 
     // Popup sizing: width fixed, height bounded so the dialog never leaves
     // the screen — everything inside scrolls.
-    readonly property real scrollCap: Kirigami.Units.gridUnit * 20
+    readonly property real scrollCap: Kirigami.Units.gridUnit * 27.5
     readonly property real contentNeeded: content.implicitHeight + Kirigami.Units.smallSpacing * 2
     implicitWidth: isClaudemeter ? Kirigami.Units.gridUnit * 21 : Kirigami.Units.gridUnit * 25
     implicitHeight: (showTopToolbar ? header.implicitHeight : 0)
@@ -51,7 +51,7 @@ Item {
         Rectangle {
             id: track
             Layout.fillWidth: true
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+            Layout.minimumWidth: Kirigami.Units.gridUnit * 2
             implicitHeight: full.barHeight()
             radius: height / 2
             color: Qt.alpha(Kirigami.Theme.textColor, 0.10)
@@ -666,6 +666,7 @@ Item {
                         readonly property var windows: isOk ? root.toArray(provider.windows) : []
 
                         width: (parent.width - Kirigami.Units.smallSpacing) / 2
+                        height: tile.implicitHeight
                         spacing: Kirigami.Units.smallSpacing * 0.8
 
                         Rectangle {
