@@ -3,7 +3,7 @@
     "KPlugin": {
         "Id": "com.bhuvan.usagelimits",
         "Name": "Usage Limits",
-        "Description": "Claude, Codex, OpenCode Go and Z.ai usage limits in your Plasma panel",
+        "Description": "Claude, Codex, OpenCode Go, Z.ai, Antigravity and Command Code usage limits in your Plasma panel",
         "Icon": "view-statistics",
         "Authors": [
             {
