@@ -76,6 +76,9 @@ Right-click the widget and choose **Configure...**:
 - **Providers** — show/hide each of the six individually
 - **Panel style** — rings / glow / capsule / dots / bars / letters+percentages /
   worst-pill, sized for anything from thin vertical panels to wide panels
+- **Popup layout** — cards (soft panels), compact (dense list), or grid
+  (small tiles in two columns) for the expanded window; long popups scroll
+- **Updated time** — relative ("2m ago"), 12-hour, or 24-hour clock
 - **Color theme** — presets (Warm, Sunset, Nord, Mono) or fully custom colors
 - Poll interval (default 15 minutes; these endpoints rate-limit hard)
 - Warning / critical thresholds

@@ -13,6 +13,8 @@ KCM.SimpleKCM {
     property alias cfg_criticalThreshold: criticalSpinBox.value
     property string cfg_panelStyle
     property string cfg_colorTheme
+    property string cfg_popupStyle
+    property string cfg_timeFormat
     property alias cfg_showClaude: showClaudeBox.checked
     property alias cfg_showCodex: showCodexBox.checked
     property alias cfg_showOpencode: showOpencodeBox.checked
@@ -55,6 +57,57 @@ KCM.SimpleKCM {
                 var found = currentIndex
                 for (var i = 0; i < model.length; i++) {
                     if (model[i].value === configGeneral.cfg_panelStyle) {
+                        found = i
+                        break
+                    }
+                }
+                currentIndex = found
+            }
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Expanded popup"
+        }
+
+        QQC2.ComboBox {
+            id: popupStyleBox
+            Kirigami.FormData.label: "Popup layout:"
+            textRole: "label"
+            valueRole: "value"
+            model: [
+                { label: "Cards — one soft panel per provider", value: "cards" },
+                { label: "Compact — dense list with thin bars", value: "compact" },
+                { label: "Grid — small tiles in two columns", value: "grid" }
+            ]
+            onActivated: configGeneral.cfg_popupStyle = currentValue
+            Component.onCompleted: {
+                var found = currentIndex
+                for (var i = 0; i < model.length; i++) {
+                    if (model[i].value === configGeneral.cfg_popupStyle) {
+                        found = i
+                        break
+                    }
+                }
+                currentIndex = found
+            }
+        }
+
+        QQC2.ComboBox {
+            id: timeFormatBox
+            Kirigami.FormData.label: "Updated time:"
+            textRole: "label"
+            valueRole: "value"
+            model: [
+                { label: "Relative — \"2m ago\"", value: "ago" },
+                { label: "12-hour clock", value: "12h" },
+                { label: "24-hour clock", value: "24h" }
+            ]
+            onActivated: configGeneral.cfg_timeFormat = currentValue
+            Component.onCompleted: {
+                var found = currentIndex
+                for (var i = 0; i < model.length; i++) {
+                    if (model[i].value === configGeneral.cfg_timeFormat) {
                         found = i
                         break
                     }

@@ -96,6 +96,28 @@ PlasmoidItem {
         return worst
     }
 
+    // Distinct glyphs: initials alone would collide (Claude / Codex both "C").
+    function providerGlyph(p) {
+        var map = { "claude": "C", "codex": "X", "opencode": "G", "zai": "Z",
+                    "antigravity": "A", "commandcode": "\u25C6" }
+        var g = p && p.id ? map[p.id] : undefined
+        return g ? g : (p && p.name ? p.name.charAt(0).toUpperCase() : "?")
+    }
+
+    function providerGlyphForId(providerId, providerName) {
+        return providerGlyph({ id: providerId, name: providerName })
+    }
+
+    // Highest window percentage of one provider (for marks and accents).
+    function providerWorst(p) {
+        var windows = toArray(p ? p.windows : [])
+        var worst = 0
+        for (var i = 0; i < windows.length; i++) {
+            if (windows[i].percent > worst) worst = windows[i].percent
+        }
+        return worst
+    }
+
     function usageColor(percent) {
         if (percent >= root.criticalThreshold) return Kirigami.Theme.negativeTextColor
         if (percent >= root.warningThreshold) return plasmoid.configuration.warningColor || "#E5C07B"
@@ -224,20 +246,8 @@ PlasmoidItem {
     }
 
     // --- Widget setup ---
-    // Panel hover tooltip via Plasma's native tooltip system — plain text
-    // only: toolTipSubText is rendered literally, no rich text here.
-    readonly property string tooltipSummary: {
-        var parts = []
-        var rows = root.limitRows
-        for (var i = 0; i < rows.length; i++) {
-            parts.push(rows[i].provider + " " + rows[i].label + " — " + Math.round(rows[i].util) + "%")
-        }
-        if (root.hasError || parts.length === 0) return ""
-        return parts.join("\n")
-    }
-
-    toolTipMainText: root.hasError ? "" : "AI plan usage"
-    toolTipSubText: root.hasError ? root.errorMessage : root.tooltipSummary
+    // No hover tooltip on the panel: the plain-text list looked bad and the
+    // popup is one click away — hover focus stays clean.
 
     switchWidth: Kirigami.Units.gridUnit * 12
     switchHeight: Kirigami.Units.gridUnit * 10

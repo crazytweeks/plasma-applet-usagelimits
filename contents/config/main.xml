@@ -26,6 +26,14 @@
             <label>Bar color preset: custom, warm, sunset, nord, or mono</label>
             <default>warm</default>
         </entry>
+        <entry name="popupStyle" type="String">
+            <label>Expanded popup layout: cards, compact, or grid</label>
+            <default>cards</default>
+        </entry>
+        <entry name="timeFormat" type="String">
+            <label>Updated-time style: ago (relative), 12h, or 24h</label>
+            <default>ago</default>
+        </entry>
         <entry name="normalColor" type="String">
             <label>Normal usage bar color</label>
             <default>#D77757</default>

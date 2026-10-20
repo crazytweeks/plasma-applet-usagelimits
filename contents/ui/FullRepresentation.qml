@@ -4,44 +4,136 @@ import QtQuick.Controls as QQC2
 
 import org.kde.kirigami as Kirigami
 
-ColumnLayout {
+Item {
     id: full
 
-    Layout.preferredWidth: Kirigami.Units.gridUnit * 28
-    Layout.minimumWidth: Kirigami.Units.gridUnit * 24
-    Layout.minimumHeight: Kirigami.Units.gridUnit * 14
+    // Popup sizing: width fixed, height bounded so the dialog never leaves
+    // the screen — everything inside scrolls.
+    readonly property real scrollCap: Kirigami.Units.gridUnit * 14.5
+    readonly property real contentNeeded: content.implicitHeight + Kirigami.Units.smallSpacing * 1.4
+    implicitWidth: Kirigami.Units.gridUnit * 26
+    implicitHeight: header.implicitHeight
+                    + (root.hasError ? errorLabel.implicitHeight : 0)
+                    + Math.min(contentNeeded, scrollCap)
+                    + footer.implicitHeight
+                    + Kirigami.Units.smallSpacing * 5
 
-    spacing: Kirigami.Units.smallSpacing
+    property string popupStyle: plasmoid.configuration.popupStyle || "cards"
+    // --- Shared visuals ---
+    function barHeight() {
+        return Math.max(Kirigami.Units.gridUnit * 0.28, 6)
+    }
 
-    RowLayout {
-        Layout.fillWidth: true
+    /**
+     * One usage row: label • countdown • thin filled bar • percent.
+     */
+    component UsageRow: RowLayout {
+        required property var win
+
+        spacing: Kirigami.Units.smallSpacing * 1.2
 
         QQC2.Label {
-            Layout.fillWidth: true
-            text: "AI plan usage"
-            font.bold: true
+            text: win.label
+            font.pointSize: Qt.application.font.pointSize * 0.92
             elide: Text.ElideRight
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 5.5
         }
 
         QQC2.Label {
-            visible: root.loading && !root.hasError
-            text: "Loading…"
-            opacity: 0.6
+            visible: win.resetsAt !== ""
+            text: root.formatResetTime(win.resetsAt)
+            opacity: 0.55
+            font.pointSize: Qt.application.font.pointSize * 0.85
         }
 
-        QQC2.ToolButton {
-            display: QQC2.AbstractButton.IconOnly
-            icon.name: "view-refresh"
-            enabled: !root.fetchInFlight
-            onClicked: root.requestFetch("manual")
+        Rectangle {
+            id: track
+            Layout.fillWidth: true
+            Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+            implicitHeight: full.barHeight()
+            radius: height / 2
+            color: Qt.alpha(Kirigami.Theme.textColor, 0.10)
 
-            QQC2.ToolTip.text: "Refresh now"
-            QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.delay: Kirigami.Units.longDuration
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: parent.width * Math.min(100, Math.max(0, win.percent)) / 100
+                radius: parent.radius
+                color: root.usageColor(win.percent)
+                Behavior on width { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
+            }
+        }
+
+        QQC2.Label {
+            text: Math.round(win.percent) + "%"
+            font.pointSize: Qt.application.font.pointSize * 0.92
+            font.bold: win.percent >= root.warningThreshold
+            color: root.usageColor(win.percent)
+            horizontalAlignment: Text.AlignRight
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 2.5
+        }
+    }
+
+    /** Round initials chip used as the provider mark in every style. */
+    component ProviderMark: Rectangle {
+        id: mark
+        required property var provider
+        readonly property real worst: root.providerWorst(provider)
+        width: Kirigami.Units.iconSizes.small
+        height: width
+        radius: height * 0.32
+        color: provider.state === "ok"
+            ? Qt.alpha(root.usageColor(worst), 0.22)
+            : Qt.alpha(Kirigami.Theme.negativeTextColor, 0.18)
+
+        QQC2.Label {
+            anchors.centerIn: parent
+            text: root.providerGlyph(parent.provider)
+            color: parent.provider.state === "ok"
+                ? root.usageColor(parent.worst)
+                : Kirigami.Theme.negativeTextColor
+            font.bold: true
+            font.pixelSize: parent.height * 0.45
+        }
+    }
+
+    ColumnLayout {
+        id: header
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        spacing: Kirigami.Units.smallSpacing
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            Item { Layout.fillWidth: true }
+
+            QQC2.Label {
+                visible: root.loading && !root.hasError
+                text: "Loading…"
+                opacity: 0.6
+            }
+
+            QQC2.ToolButton {
+                display: QQC2.AbstractButton.IconOnly
+                icon.name: "view-refresh"
+                enabled: !root.fetchInFlight
+                onClicked: root.requestFetch("manual")
+
+                QQC2.ToolTip.text: "Refresh now"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.longDuration
+            }
         }
     }
 
     QQC2.Label {
+        id: errorLabel
+        anchors.top: header.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
         Layout.fillWidth: true
         visible: root.hasError
         text: root.errorMessage
@@ -49,161 +141,383 @@ ColumnLayout {
         wrapMode: Text.WordWrap
     }
 
-    Repeater {
-        model: root.visibleProviders
+    QQC2.ScrollView {
+        id: scroller
+        anchors.top: root.hasError ? errorLabel.bottom : header.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: footer.top
+        anchors.topMargin: Kirigami.Units.smallSpacing
+        clip: true
 
-        QQC2.Frame {
-            id: card
-            required property var modelData
-            readonly property var provider: modelData
-            readonly property bool isOk: provider.state === "ok"
-            // Route through toArray: windows crossed a `property var`
-            // boundary and need array-like handling, not Array.isArray.
-            readonly property var windows: isOk ? root.toArray(provider.windows) : []
+        ColumnLayout {
+            id: content
+            width: scroller.width
+                   - (scroller.QQC2.ScrollBar.vertical.visible
+                      ? scroller.QQC2.ScrollBar.vertical.width : 0)
+            spacing: Kirigami.Units.smallSpacing * 1.4
 
-            Layout.fillWidth: true
-            padding: Kirigami.Units.smallSpacing * 1.5
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing * 1.5
+            Loader {
+                Layout.fillWidth: true
+                sourceComponent: {
+                    if (full.popupStyle === "compact") return compactList
+                    if (full.popupStyle === "grid") return gridStyle
+                    return cardList
+                }
+            }
 
-                // --- Provider header ---
-                RowLayout {
+            QQC2.Label {
+                Layout.fillWidth: true
+                visible: !root.hasError && !root.loading && root.limitRows.length === 0
+                text: {
+                    var any = root.providers.length > 0
+                    return any ? "No active usage data. Enable providers in settings or sign in via their CLIs."
+                               : "No usage data yet. Wait for the first fetch."
+                }
+                opacity: 0.6
+                wrapMode: Text.WordWrap
+            }
+
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    // Ticks so the relative "… ago" time stays current while open.
+    property bool tick: false
+    Timer {
+        interval: 15000
+        running: full.visible
+        repeat: true
+        onTriggered: full.tick = !full.tick
+    }
+
+    QQC2.Label {
+        id: footer
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        visible: !root.hasError && !root.loading
+        text: {
+            var t = root.lastUpdated
+            var mode = plasmoid.configuration.timeFormat || "ago"
+            if (mode === "ago" || tick === undefined) {
+                var diff = Math.max(0, (Date.now() - t.getTime()) / 1000)
+                if (diff < 60) return "Refreshed " + Math.floor(diff) + "s ago"
+                if (diff < 3600) return "Refreshed " + Math.floor(diff / 60) + "m ago"
+                return "Refreshed " + Math.floor(diff / 3600) + "h ago"
+            }
+            return "Updated " + Qt.formatTime(t, mode === "12h" ? "h:mm ap" : "hh:mm")
+        }
+        opacity: 0.5
+    }
+
+    // === Style: cards — one soft panel per provider =========================
+
+    Component {
+        id: cardList
+        ColumnLayout {
+            width: parent ? parent.width : 0
+            spacing: Kirigami.Units.smallSpacing * 1.6
+
+            Repeater {
+                model: root.visibleProviders
+
+                ColumnLayout {
+                    id: card
+                    required property var modelData
+                    readonly property var provider: modelData
+                    readonly property bool isOk: provider.state === "ok"
+                    readonly property var windows: isOk ? root.toArray(provider.windows) : []
+
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing * 1.5
+                    spacing: Kirigami.Units.smallSpacing * 1.3
 
-                    Kirigami.Icon {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        source: card.isOk ? "view-statistics" : "data-warning"
-                        color: card.isOk ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.negativeTextColor
-                    }
-
-                    QQC2.Label {
+                    Rectangle {
                         Layout.fillWidth: true
-                        text: root.providerRowLabel(card.provider)
-                        font.bold: true
-                        elide: Text.ElideRight
-                    }
+                        Layout.preferredHeight: cardInner.implicitHeight + Kirigami.Units.smallSpacing * 3
+                        radius: Kirigami.Units.smallSpacing * 1.5
+                        color: Qt.alpha(Kirigami.Theme.textColor, 0.05)
+                        border.width: 1
+                        border.color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
 
-                    QQC2.Label {
-                        visible: card.provider.detail !== ""
-                        text: card.provider.detail
-                        opacity: 0.55
-                        elide: Text.ElideRight
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                    }
+                        ColumnLayout {
+                            id: cardInner
+                            x: Kirigami.Units.smallSpacing * 1.5
+                            y: Kirigami.Units.smallSpacing * 1.5
+                            width: parent.width - Kirigami.Units.smallSpacing * 3
+                            spacing: Kirigami.Units.smallSpacing * 1.1
 
-                    QQC2.Label {
-                        visible: card.provider.cached === true
-                        text: "cached"
-                        font.italic: true
-                        opacity: 0.55
-                    }
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    visible: card.isOk && card.provider.notice !== undefined && card.provider.notice !== ""
-                    text: card.provider.notice || ""
-                    color: Kirigami.Theme.neutralTextColor
-                    opacity: 0.8
-                    wrapMode: Text.WordWrap
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    visible: !card.isOk && card.provider.detail !== ""
-                    text: card.provider.detail
-                    color: Kirigami.Theme.negativeTextColor
-                    opacity: 0.7
-                    wrapMode: Text.WordWrap
-                }
-
-                // --- Window rows ---
-                Repeater {
-                    model: card.windows
-
-                    ColumnLayout {
-                        required property var modelData
-                        readonly property var win: modelData
-
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-
-                        RowLayout {
-                            Layout.fillWidth: true
-
-                            QQC2.Label {
-                                text: win.label
-                            }
-
-                            Item {
+                            RowLayout {
                                 Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing * 1.2
+
+                                ProviderMark {
+                                    provider: card.provider
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: root.providerRowLabel(card.provider)
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+
+                                QQC2.Label {
+                                    visible: card.provider.detail !== ""
+                                    text: card.provider.detail
+                                    opacity: 0.55
+                                    elide: Text.ElideRight
+                                    Layout.maximumWidth: Kirigami.Units.gridUnit * 8
+                                }
+
+                                QQC2.Label {
+                                    visible: card.provider.cached === true
+                                    text: "cached"
+                                    font.italic: true
+                                    opacity: 0.55
+                                }
                             }
 
                             QQC2.Label {
-                                visible: win.resetsAt !== ""
-                                text: root.formatResetTime(win.resetsAt)
-                                opacity: 0.6
+                                Layout.fillWidth: true
+                                visible: card.isOk && card.provider.notice !== undefined && card.provider.notice !== ""
+                                text: card.provider.notice || ""
+                                color: Kirigami.Theme.neutralTextColor
+                                opacity: 0.8
+                                wrapMode: Text.WordWrap
                             }
 
                             QQC2.Label {
-                                text: Math.round(win.percent) + "%"
-                                horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 2.5
+                                Layout.fillWidth: true
+                                visible: !card.isOk && card.provider.detail !== ""
+                                text: card.provider.detail
+                                color: Kirigami.Theme.negativeTextColor
+                                opacity: 0.7
+                                wrapMode: Text.WordWrap
                             }
-                        }
 
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Kirigami.Units.gridUnit * 0.4
-                            radius: 2
-                            color: Qt.alpha(Kirigami.Theme.textColor, 0.12)
+                            Repeater {
+                                model: card.windows
 
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: parent.width * Math.min(100, Math.max(0, win.percent)) / 100
-                                radius: parent.radius
-                                color: root.usageColor(win.percent)
+                                UsageRow {
+                                    required property var modelData
+                                    win: modelData
+                                }
+                            }
+
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                visible: card.isOk && card.windows.length === 0
+                                text: "No usage windows reported"
+                                opacity: 0.5
+                                wrapMode: Text.WordWrap
                             }
                         }
                     }
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    visible: card.isOk && card.windows.length === 0
-                    text: "No usage windows reported"
-                    opacity: 0.5
-                    wrapMode: Text.WordWrap
                 }
             }
         }
     }
 
-    QQC2.Label {
-        Layout.fillWidth: true
-        visible: !root.hasError && !root.loading && root.limitRows.length === 0
-        text: {
-            var any = root.providers.length > 0
-            return any ? "No active usage data. Enable providers in settings or sign in via their CLIs."
-                       : "No usage data yet. Wait for the first fetch."
+    // === Style: compact — dense list, no boxes ==============================
+
+    Component {
+        id: compactList
+        ColumnLayout {
+            width: parent ? parent.width : 0
+            spacing: Kirigami.Units.smallSpacing * 1.6
+
+            Repeater {
+                model: root.visibleProviders
+
+                ColumnLayout {
+                    id: group
+                    required property var modelData
+                    readonly property var provider: modelData
+                    readonly property bool isOk: provider.state === "ok"
+                    readonly property var windows: isOk ? root.toArray(provider.windows) : []
+
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing * 0.9
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 1
+                        color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
+                        visible: group.index > 0
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing * 1.2
+
+                        ProviderMark {
+                            provider: group.provider
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: root.providerRowLabel(group.provider)
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+
+                        QQC2.Label {
+                            visible: group.provider.detail !== ""
+                                    && group.provider.state === "ok"
+                            text: group.provider.detail
+                            opacity: 0.55
+                            font.pointSize: Qt.application.font.pointSize * 0.85
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 8
+                        }
+
+                        Kirigami.Icon {
+                            visible: !group.isOk
+                            source: "data-warning"
+                            color: Kirigami.Theme.negativeTextColor
+                            implicitWidth: Kirigami.Units.iconSizes.small
+                            implicitHeight: Kirigami.Units.iconSizes.small
+                        }
+
+                        QQC2.Label {
+                            visible: !group.isOk
+                            text: group.provider.detail
+                            color: Kirigami.Theme.negativeTextColor
+                            opacity: 0.7
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 12
+                        }
+                    }
+
+                    Repeater {
+                        model: group.windows
+
+                        UsageRow {
+                            required property var modelData
+                            win: modelData
+                        }
+                    }
+
+                    QQC2.Label {
+                        visible: group.isOk && group.windows.length === 0
+                        text: "No usage windows reported"
+                        opacity: 0.5
+                        font.pointSize: Qt.application.font.pointSize * 0.85
+                    }
+                }
+            }
         }
-        opacity: 0.6
-        wrapMode: Text.WordWrap
     }
 
-    Item {
-        Layout.fillHeight: true
-    }
+    // === Style: grid — small provider tiles in two columns ==================
 
-    QQC2.Label {
-        Layout.alignment: Qt.AlignRight
-        visible: !root.hasError && !root.loading
-        text: "Updated " + Qt.formatTime(root.lastUpdated, "hh:mm")
-        opacity: 0.5
+    Component {
+        id: gridStyle
+        ColumnLayout {
+            width: parent ? parent.width : 0
+            spacing: Kirigami.Units.smallSpacing
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Repeater {
+                    model: root.visibleProviders
+
+                    ColumnLayout {
+                        id: tile
+                        required property var modelData
+                        readonly property var provider: modelData
+                        readonly property bool isOk: provider.state === "ok"
+                        readonly property var windows: isOk ? root.toArray(provider.windows) : []
+
+                        width: (parent.width - Kirigami.Units.smallSpacing) / 2
+                        spacing: Kirigami.Units.smallSpacing * 0.8
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: tileInner.implicitHeight + Kirigami.Units.smallSpacing * 2
+                            radius: Kirigami.Units.smallSpacing * 1.5
+                            color: Qt.alpha(Kirigami.Theme.textColor, 0.05)
+                            border.width: 1
+                            border.color: Qt.alpha(Kirigami.Theme.textColor, 0.08)
+
+                            ColumnLayout {
+                                id: tileInner
+                                x: Kirigami.Units.smallSpacing
+                                y: Kirigami.Units.smallSpacing
+                                width: parent.width - Kirigami.Units.smallSpacing * 2
+                                spacing: Kirigami.Units.smallSpacing * 0.7
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Kirigami.Units.smallSpacing
+
+                                    QQC2.Label {
+                                        text: root.providerGlyph(tile.provider)
+                                        font.bold: true
+                                        color: tile.isOk ? Kirigami.Theme.disabledTextColor
+                                                         : Kirigami.Theme.negativeTextColor
+                                    }
+
+                                    QQC2.Label {
+                                        Layout.fillWidth: true
+                                        text: root.providerRowLabel(tile.provider)
+                                        font.bold: true
+                                        font.pointSize: Qt.application.font.pointSize * 0.92
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Kirigami.Icon {
+                                        visible: !tile.isOk
+                                        source: "data-warning"
+                                        color: Kirigami.Theme.negativeTextColor
+                                        implicitWidth: Kirigami.Units.iconSizes.small
+                                        implicitHeight: Kirigami.Units.iconSizes.small
+                                    }
+                                }
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: tile.isOk && tile.provider.detail !== ""
+                                    text: tile.provider.detail
+                                    opacity: 0.55
+                                    font.pointSize: Qt.application.font.pointSize * 0.78
+                                    elide: Text.ElideRight
+                                }
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: !tile.isOk
+                                    text: tile.provider.detail
+                                    color: Kirigami.Theme.negativeTextColor
+                                    opacity: 0.7
+                                    elide: Text.ElideRight
+                                }
+
+                                Repeater {
+                                    model: tile.windows
+
+                                    UsageRow {
+                                        required property var modelData
+                                        win: modelData
+                                    }
+                                }
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: tile.isOk && tile.windows.length === 0
+                                    text: "No windows"
+                                    opacity: 0.5
+                                    font.pointSize: Qt.application.font.pointSize * 0.78
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
