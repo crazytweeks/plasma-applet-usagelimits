@@ -19,20 +19,32 @@
             <default>95</default>
         </entry>
         <entry name="panelStyle" type="String">
-            <label>Panel display style: bars, text, worst, rings, glow, dots, or capsule</label>
-            <default>rings</default>
+            <label>Panel display style: dual_rings, gauge, bars, rings, glow, dots, capsule, text, or worst</label>
+            <default>dual_rings</default>
+        </entry>
+        <entry name="gaugeLabel" type="String">
+            <label>Label shown inside gauge: percent, time, glyph, or none</label>
+            <default>percent</default>
+        </entry>
+        <entry name="panelLabelMode" type="String">
+            <label>Side label next to panel widgets: none, plan, glyph, or name</label>
+            <default>plan</default>
         </entry>
         <entry name="colorTheme" type="String">
-            <label>Bar color preset: custom, warm, sunset, nord, or mono</label>
+            <label>Bar color preset: custom, warm, sky, emerald, amethyst, sunset, nord, or mono</label>
             <default>warm</default>
         </entry>
         <entry name="popupStyle" type="String">
-            <label>Expanded popup layout: cards, compact, or grid</label>
-            <default>cards</default>
+            <label>Expanded popup layout: claudemeter, cards, compact, or grid</label>
+            <default>claudemeter</default>
+        </entry>
+        <entry name="showPace" type="Bool">
+            <label>Show pace segments, caret marker, and Ahead of pace on popup bars</label>
+            <default>true</default>
         </entry>
         <entry name="timeFormat" type="String">
             <label>Updated-time style: ago (relative), 12h, or 24h</label>
-            <default>ago</default>
+            <default>24h</default>
         </entry>
         <entry name="normalColor" type="String">
             <label>Normal usage bar color</label>

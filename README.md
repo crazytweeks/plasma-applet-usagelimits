@@ -74,12 +74,19 @@ kpackagetool6 -t Plasma/Applet -r com.bhuvan.usagelimits
 Right-click the widget and choose **Configure...**:
 
 - **Providers** — show/hide each of the six individually
-- **Panel style** — rings / glow / capsule / dots / bars / letters+percentages /
-  worst-pill, sized for anything from thin vertical panels to wide panels
-- **Popup layout** — cards (soft panels), compact (dense list), or grid
-  (small tiles in two columns) for the expanded window; long popups scroll
-- **Updated time** — relative ("2m ago"), 12-hour, or 24-hour clock
-- **Color theme** — presets (Warm, Sunset, Nord, Mono) or fully custom colors
+- **Panel style** — dual-rings (Claudemeter concentric outer + inner limit rings),
+  gauge (Claudemeter single ring with time-to-reset or %), thermometer bars
+  (Claudemeter pill bars), glyph rings, glow chips, capsule strip, severity
+  dots, letters+percentages, or single worst-usage pill
+- **Gauge center text & side labels** — show `%`, time remaining, or provider
+  glyph inside gauges, and plan badges (`PRO`, `MAX`, `PLUS`, `GO`, `GLM`,
+  `AGY`, `GOAT`) or provider letters beside panel widgets
+- **Popup layout** — Claudemeter (segmented pace bars with caret markers,
+  "Ahead of pace" split fills, and cyan Extra Usage / Monthly Credits bars),
+  cards, compact, or grid; long popups scroll
+- **Updated time** — 24-hour, 12-hour, or relative ("Refreshed 2m ago")
+- **Color theme** — Claudemeter Warm (`#D77757` → `#E5C07B`), Sky Blue,
+  Emerald Green, Amethyst Purple, Sunset, Nord, Mono, or custom colors
 - Poll interval (default 15 minutes; these endpoints rate-limit hard)
 - Warning / critical thresholds
 - Normal / warning bar colors

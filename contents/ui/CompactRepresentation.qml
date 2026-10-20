@@ -3,29 +3,43 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 
 import org.kde.kirigami as Kirigami
+import org.kde.quickcharts as Charts
 
 MouseArea {
     id: compact
 
-    // Styles: "bars" grouped mini bars, "text" letters+percentages, "worst"
-    // single pill, "rings" round gauges, "glow" brightness chips, "dots"
-    // severity dots, "capsule" one segmented strip.
+    // Styles:
+    // "dual_rings" — Claudemeter concentric outer + inner gauge rings
+    // "gauge"      — Claudemeter single gauge ring with time/percent/glyph
+    // "bars"       — Claudemeter vertical pill thermometer bars
+    // "rings"      — circular gauge with provider letter
+    // "glow"       — brightness chips
+    // "dots"       — severity dots
+    // "capsule"    — single segmented strip
+    // "text"       — letters + percentages
+    // "worst"      — single worst usage pill
     readonly property string style: root.panelStyle
     readonly property bool hasData: root.limitRows.length > 0
     readonly property int chipSize: Math.max(14, Math.min(24, compact.height - 8))
+    readonly property int gaugeSize: Math.max(20, Math.min(34, compact.height - 2))
     readonly property real pad: Kirigami.Units.smallSpacing * 1.5
+    readonly property bool isDark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
+    readonly property color trackColor: isDark ? "#33373B" : "#E5E7E8"
 
-    // Distinct glyphs: initials alone would collide (Claude / Codex both "C").
     function glyph(p) {
-        var map = { "claude": "C", "codex": "X", "opencode": "G", "zai": "Z",
-                    "antigravity": "A", "commandcode": "◆" }
-        var g = p && p.id ? map[p.id] : undefined
-        return g ? g : (p && p.name ? p.name.charAt(0).toUpperCase() : "?")
+        return root.providerGlyph(p)
     }
 
-    // Glyph by provider id, for flat rows that no longer carry the object.
     function glyphForId(providerId, providerName) {
-        return glyph({ id: providerId, name: providerName })
+        return root.providerGlyphForId(providerId, providerName)
+    }
+
+    function sideLabel(p) {
+        var mode = root.panelLabelMode
+        if (mode === "none") return ""
+        if (mode === "plan") return root.providerPlanBadge(p)
+        if (mode === "name") return root.providerShortName(p)
+        return root.providerGlyph(p)
     }
 
     function worstOf(provider) {
@@ -38,11 +52,42 @@ MouseArea {
         return worst
     }
 
+    // Picks [outerUtil, innerUtil] for dual-ring gauges so providers with 3+
+    // windows (OpenCode Go, Antigravity, Command Code) always show their
+    // active 5h limit on the outer ring and their fullest longer limit on the
+    // inner ring.
+    function ringPairOf(provider) {
+        var windows = root.toArray(provider.windows)
+        if (windows.length === 0) return [0, 0]
+        if (windows.length === 1) return [windows[0].percent || 0, 0]
+        if (windows.length === 2) return [windows[0].percent || 0, windows[1].percent || 0]
+        var shortBest = -1
+        var longBest = 0
+        for (var i = 0; i < windows.length; i++) {
+            var w = windows[i]
+            var p = w.percent || 0
+            var id = String(w.id || "")
+            var lbl = String(w.label || "")
+            if (id === "five_hour" || id === "rolling" || /5h/i.test(lbl)) {
+                if (p > shortBest) shortBest = p
+            } else {
+                if (p > longBest) longBest = p
+            }
+        }
+        if (shortBest < 0) shortBest = windows[0].percent || 0
+        return [shortBest, longBest]
+    }
+
+    function primaryResetOf(provider) {
+        var windows = root.toArray(provider.windows)
+        for (var i = 0; i < windows.length; i++) {
+            if (windows[i].resetsAt) return windows[i].resetsAt
+        }
+        return ""
+    }
+
     onClicked: root.expanded = !root.expanded
     hoverEnabled: true
-
-    // Hover tooltip is handled by PlasmoidItem's native Plasma tooltip in
-    // main.qml — QQC2.ToolTip here is what blinked on the panel.
 
     Layout.minimumWidth: (loader.item ? loader.item.implicitWidth : Kirigami.Units.gridUnit) + compact.pad * 2
     Layout.minimumHeight: Kirigami.Units.gridUnit
@@ -62,6 +107,8 @@ MouseArea {
         id: loader
         anchors.centerIn: parent
         sourceComponent: {
+            if (compact.style === "dual_rings") return dualRingsStyle
+            if (compact.style === "gauge") return gaugeStyle
             if (compact.style === "rings") return ringsStyle
             if (compact.style === "glow") return glowStyle
             if (compact.style === "dots") return dotsStyle
@@ -72,77 +119,88 @@ MouseArea {
         }
     }
 
-    // --- Shared binding helpers: values crossing Repeater delegates need
-    // to survive the var->QVariant boundary, so windows come via toArray.
-
-    // Style: grouped mini bars (per provider, per window).
+    // === Style: Claudemeter Thermometer Bars ===============================
     Component {
         id: barsStyle
         Item {
             readonly property bool showsData: true
+            readonly property real barHeight: Math.max(14, compact.height * 0.76)
+            readonly property int barThickness: Math.max(4, Math.round(barHeight / 4.5))
             implicitWidth: barRow.implicitWidth
-            implicitHeight: compact.height * 0.72
+            implicitHeight: barHeight
 
             Row {
                 id: barRow
                 anchors.centerIn: parent
-                spacing: Kirigami.Units.smallSpacing * 2.5
+                spacing: Kirigami.Units.smallSpacing * 2
 
                 Repeater {
                     model: root.visibleProviders
 
-                    Item {
-                        id: providerColumn
+                    Row {
+                        id: providerGroup
                         required property var modelData
                         readonly property var provider: modelData
                         readonly property bool isOk: provider.state === "ok"
                         readonly property var windows: isOk ? root.toArray(provider.windows) : []
+                        readonly property string badgeText: compact.sideLabel(provider)
 
-                        width: {
-                            var n = windows.length
-                            if (n === 0) return Kirigami.Units.gridUnit * 0.6
-                            return n * Kirigami.Units.gridUnit * 0.6
-                                + (n - 1) * innerRow.spacing
+                        spacing: Kirigami.Units.smallSpacing * 0.8
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        QQC2.Label {
+                            visible: providerGroup.badgeText !== ""
+                            text: providerGroup.badgeText
+                            font.pixelSize: Math.max(8, Math.round(compact.height * 0.30))
+                            opacity: 0.65
+                            color: Kirigami.Theme.textColor
+                            anchors.verticalCenter: parent.verticalCenter
                         }
-                        height: compact.height * 0.72
 
                         Row {
-                            id: innerRow
-                            anchors.centerIn: parent
-                            spacing: Kirigami.Units.smallSpacing
+                            id: innerBars
+                            spacing: 1
+                            anchors.verticalCenter: parent.verticalCenter
 
                             Repeater {
-                                model: providerColumn.windows
+                                model: providerGroup.windows
 
                                 Rectangle {
                                     required property var modelData
                                     readonly property var win: modelData
                                     readonly property real util: win ? (win.percent || 0) : 0
 
-                                    width: Kirigami.Units.gridUnit * 0.6
-                                    height: providerColumn.height
-                                    radius: 2
-                                    color: Qt.alpha(Kirigami.Theme.textColor, 0.12)
+                                    width: barsStyleItem ? barsStyleItem.barThickness : 5
+                                    property var barsStyleItem: innerBars.parent.parent.parent
+                                    height: barsStyleItem ? barsStyleItem.barHeight : 20
+                                    radius: width / 2
+                                    color: Kirigami.Theme.backgroundColor
+                                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                                    border.width: 1
 
                                     Rectangle {
-                                        anchors.bottom: parent.bottom
                                         anchors.left: parent.left
                                         anchors.right: parent.right
-                                        height: parent.height * Math.min(100, Math.max(0, parent.util)) / 100
+                                        anchors.bottom: parent.bottom
+                                        height: parent.height * Math.min(Math.max(parent.util, 0) / 100, 1.0)
                                         radius: parent.radius
                                         color: root.usageColor(parent.util)
+
+                                        Behavior on height {
+                                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                                        }
                                     }
                                 }
                             }
                         }
 
                         Kirigami.Icon {
-                            visible: providerColumn.windows.length === 0
-                            anchors.centerIn: parent
+                            visible: providerGroup.windows.length === 0
+                            anchors.verticalCenter: parent.verticalCenter
                             width: Kirigami.Units.iconSizes.small
                             height: width
-                            source: providerColumn.isOk ? "view-refresh" : "data-warning"
-                            color: providerColumn.isOk ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.negativeTextColor
+                            source: providerGroup.isOk ? "view-refresh" : "data-warning"
+                            color: providerGroup.isOk ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.negativeTextColor
                         }
                     }
                 }
@@ -150,7 +208,248 @@ MouseArea {
         }
     }
 
-    // Style: rings — one circular gauge per provider.
+    // === Style: Claudemeter Dual Rings (Outer + Inner Concentric Gauge) =====
+    Component {
+        id: dualRingsStyle
+        Item {
+            readonly property bool showsData: compact.hasData
+            implicitWidth: dualRow.implicitWidth
+            implicitHeight: compact.gaugeSize
+
+            Row {
+                id: dualRow
+                anchors.centerIn: parent
+                spacing: Kirigami.Units.smallSpacing * 1.8
+
+                Repeater {
+                    model: root.visibleProviders
+
+                    Row {
+                        id: dualGroup
+                        required property var modelData
+                        readonly property var provider: modelData
+                        readonly property bool isOk: provider.state === "ok"
+                        readonly property var windows: isOk ? root.toArray(provider.windows) : []
+                        readonly property var pair: isOk ? compact.ringPairOf(provider) : [0, 0]
+                        readonly property real outerUtil: pair[0]
+                        readonly property real innerUtil: pair[1]
+                        readonly property bool hasInner: windows.length > 1
+                        readonly property real worstUtil: isOk ? compact.worstOf(provider) : 0
+                        readonly property real displayUtil: outerUtil >= 1 ? outerUtil : worstUtil
+                        readonly property string badgeText: compact.sideLabel(provider)
+
+                        spacing: Kirigami.Units.smallSpacing * 0.7
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        QQC2.Label {
+                            visible: dualGroup.badgeText !== ""
+                            text: dualGroup.badgeText
+                            font.pixelSize: Math.max(8, Math.round(compact.height * 0.28))
+                            opacity: 0.65
+                            color: Kirigami.Theme.textColor
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Item {
+                            id: gaugeBox
+                            width: compact.gaugeSize
+                            height: compact.gaugeSize
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            readonly property real ringThickness: Math.max(2.0, width * 0.095)
+                            readonly property real innerInset: ringThickness + 1.2
+                            readonly property bool showInner: dualGroup.isOk && dualGroup.hasInner && width >= ringThickness * 6
+
+                            // Outer background track
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                visible: dualGroup.isOk
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: gaugeBox.ringThickness
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: 100 }
+                                colorSource: Charts.SingleValueSource { value: compact.trackColor }
+                            }
+
+                            // Outer foreground arc
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                visible: dualGroup.isOk
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: gaugeBox.ringThickness
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: dualGroup.outerUtil }
+                                colorSource: Charts.SingleValueSource { value: root.usageColor(dualGroup.outerUtil) }
+                            }
+
+                            // Inner background track
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                anchors.margins: gaugeBox.innerInset
+                                visible: gaugeBox.showInner
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: Math.max(1.8, gaugeBox.ringThickness * 0.82)
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: 100 }
+                                colorSource: Charts.SingleValueSource { value: compact.trackColor }
+                            }
+
+                            // Inner foreground arc
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                anchors.margins: gaugeBox.innerInset
+                                visible: gaugeBox.showInner
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: Math.max(1.8, gaugeBox.ringThickness * 0.82)
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: dualGroup.innerUtil }
+                                colorSource: Charts.SingleValueSource { value: root.usageColor(dualGroup.innerUtil) }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: dualGroup.isOk && root.gaugeLabel !== "none"
+                                text: {
+                                    var mode = root.gaugeLabel
+                                    if (mode === "glyph") return compact.glyph(dualGroup.provider)
+                                    if (mode === "time") {
+                                        var t = root.formatResetTime(compact.primaryResetOf(dualGroup.provider))
+                                        return (t && t !== "expired") ? t : (Math.round(dualGroup.displayUtil) + "%")
+                                    }
+                                    return Math.round(dualGroup.displayUtil) + "%"
+                                }
+                                color: Kirigami.Theme.textColor
+                                font.pixelSize: Math.max(6, Math.round(parent.width * 0.21))
+                                font.bold: root.gaugeLabel === "glyph"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Kirigami.Icon {
+                                visible: !dualGroup.isOk
+                                anchors.centerIn: parent
+                                width: parent.width * 0.7
+                                height: width
+                                source: "data-warning"
+                                color: Kirigami.Theme.negativeTextColor
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // === Style: Claudemeter Single Gauge ====================================
+    Component {
+        id: gaugeStyle
+        Item {
+            readonly property bool showsData: compact.hasData
+            implicitWidth: singleGaugeRow.implicitWidth
+            implicitHeight: compact.gaugeSize
+
+            Row {
+                id: singleGaugeRow
+                anchors.centerIn: parent
+                spacing: Kirigami.Units.smallSpacing * 1.8
+
+                Repeater {
+                    model: root.visibleProviders
+
+                    Row {
+                        id: singleGroup
+                        required property var modelData
+                        readonly property var provider: modelData
+                        readonly property bool isOk: provider.state === "ok"
+                        readonly property real util: isOk ? compact.worstOf(provider) : 0
+                        readonly property string badgeText: compact.sideLabel(provider)
+
+                        spacing: Kirigami.Units.smallSpacing * 0.7
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        QQC2.Label {
+                            visible: singleGroup.badgeText !== ""
+                            text: singleGroup.badgeText
+                            font.pixelSize: Math.max(8, Math.round(compact.height * 0.30))
+                            opacity: 0.65
+                            color: Kirigami.Theme.textColor
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Item {
+                            width: compact.gaugeSize
+                            height: compact.gaugeSize
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            readonly property real ringThickness: Math.max(2.6, Math.round(width * 0.14))
+
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                visible: singleGroup.isOk
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: parent.ringThickness
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: 100 }
+                                colorSource: Charts.SingleValueSource { value: compact.trackColor }
+                            }
+
+                            Charts.PieChart {
+                                anchors.fill: parent
+                                visible: singleGroup.isOk
+                                fromAngle: -180
+                                toAngle: 180
+                                smoothEnds: true
+                                thickness: parent.ringThickness
+                                range { from: 0; to: 100; automatic: false }
+                                valueSources: Charts.SingleValueSource { value: singleGroup.util }
+                                colorSource: Charts.SingleValueSource { value: root.usageColor(singleGroup.util) }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: singleGroup.isOk && root.gaugeLabel !== "none"
+                                text: {
+                                    var mode = root.gaugeLabel
+                                    if (mode === "glyph") return compact.glyph(singleGroup.provider)
+                                    if (mode === "time") {
+                                        var t = root.formatResetTime(compact.primaryResetOf(singleGroup.provider))
+                                        return (t && t !== "expired") ? t : (Math.round(singleGroup.util) + "%")
+                                    }
+                                    return Math.round(singleGroup.util) + "%"
+                                }
+                                color: Kirigami.Theme.textColor
+                                font.pixelSize: Math.max(7, Math.round(parent.width * 0.25))
+                                font.bold: root.gaugeLabel === "glyph"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            Kirigami.Icon {
+                                visible: !singleGroup.isOk
+                                anchors.centerIn: parent
+                                width: parent.width * 0.7
+                                height: width
+                                source: "data-warning"
+                                color: Kirigami.Theme.negativeTextColor
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // === Style: rings — circular gauge with provider glyph ==================
     Component {
         id: ringsStyle
         Item {
@@ -173,52 +472,33 @@ MouseArea {
                         readonly property var provider: modelData
                         readonly property bool isOk: provider.state === "ok"
                         readonly property real util: isOk ? compact.worstOf(provider) : 0
-                        readonly property real size: ringCellHeight
-                        readonly property real radius: size / 2 - 1.6
-                        // sizes filtered through this internal var to avoid
-                        // anchor circularity on very small panels
-                        readonly property real ringCellHeight: compact.chipSize
+                        readonly property real size: compact.chipSize
 
                         width: size
                         height: size
 
-                        // Suppress unused warning: radius used below in Canvas.
-                        readonly property real arcRadius: radius
-
-                        Canvas {
-                            id: ringCanvas
+                        Charts.PieChart {
                             anchors.fill: parent
-                            antialiasing: true
                             visible: ringCell.isOk
+                            fromAngle: -180
+                            toAngle: 180
+                            smoothEnds: true
+                            thickness: Math.max(2.2, Math.round(ringCell.size * 0.13))
+                            range { from: 0; to: 100; automatic: false }
+                            valueSources: Charts.SingleValueSource { value: 100 }
+                            colorSource: Charts.SingleValueSource { value: compact.trackColor }
+                        }
 
-                            onPaint: {
-                                var ctx = getContext("2d")
-                                ctx.reset()
-                                var cx = width / 2, cy = height / 2
-                                var r = ringCell.arcRadius
-                                ctx.lineWidth = 2.4
-                                ctx.lineCap = "round"
-                                ctx.strokeStyle = Qt.rgba(0.5, 0.5, 0.5, 0.35)
-                                ctx.beginPath()
-                                ctx.arc(cx, cy, r, 0, 2 * Math.PI)
-                                ctx.stroke()
-                                if (ringCell.util > 0) {
-                                    var start = -Math.PI / 2
-                                    var sweep = 2 * Math.PI * Math.min(1, Math.max(0, ringCell.util) / 100)
-                                    ctx.strokeStyle = root.usageColor(ringCell.util)
-                                    ctx.beginPath()
-                                    ctx.arc(cx, cy, r, start, start + sweep)
-                                    ctx.stroke()
-                                }
-                            }
-                            onWidthChanged: requestPaint()
-                            onHeightChanged: requestPaint()
-                            Component.onCompleted: requestPaint()
-
-                            Connections {
-                                target: ringCell
-                                function onUtilChanged() { ringCanvas.requestPaint() }
-                            }
+                        Charts.PieChart {
+                            anchors.fill: parent
+                            visible: ringCell.isOk
+                            fromAngle: -180
+                            toAngle: 180
+                            smoothEnds: true
+                            thickness: Math.max(2.2, Math.round(ringCell.size * 0.13))
+                            range { from: 0; to: 100; automatic: false }
+                            valueSources: Charts.SingleValueSource { value: ringCell.util }
+                            colorSource: Charts.SingleValueSource { value: root.usageColor(ringCell.util) }
                         }
 
                         QQC2.Label {
@@ -238,15 +518,13 @@ MouseArea {
                             source: "data-warning"
                             color: Kirigami.Theme.negativeTextColor
                         }
-
-                        onWidthChanged: ringCanvas.requestPaint()
                     }
                 }
             }
         }
     }
 
-    // Style: glow — chip whose brightness equals the provider's usage.
+    // === Style: glow — chip whose brightness equals usage ===================
     Component {
         id: glowStyle
         Item {
@@ -268,7 +546,7 @@ MouseArea {
                         readonly property var provider: modelData
                         readonly property bool isOk: provider.state === "ok"
                         readonly property real util: isOk ? compact.worstOf(provider) : 0
-                        readonly property real intensity: isOk ? (0.10 + 0.90 * Math.min(1, Math.max(0, util) / 100)) : 0.0
+                        readonly property real intensity: isOk ? (0.14 + 0.86 * Math.min(1, Math.max(0, util) / 100)) : 0.0
 
                         width: compact.chipSize
                         height: compact.chipSize
@@ -277,8 +555,6 @@ MouseArea {
                             ? Qt.alpha(root.usageColor(util), intensity)
                             : Qt.rgba(0.5, 0.5, 0.5, 0.15)
 
-                        // At high usage the chip is fully lit; numbers readable
-                        // as dark-on-bright like the mockup.
                         QQC2.Label {
                             anchors.centerIn: parent
                             text: compact.glyph(glowCell.provider)
@@ -294,7 +570,7 @@ MouseArea {
         }
     }
 
-    // Style: severity dots — smallest possible footprint.
+    // === Style: severity dots ===============================================
     Component {
         id: dotsStyle
         Item {
@@ -330,7 +606,7 @@ MouseArea {
         }
     }
 
-    // Style: capsule — one strip, one slot per provider.
+    // === Style: capsule — one strip, one slot per provider ==================
     Component {
         id: capsuleStyle
         Item {
@@ -394,7 +670,7 @@ MouseArea {
         }
     }
 
-    // Style: letters and percentages ("C 46% C 45%" chips).
+    // === Style: letters and percentages =====================================
     Component {
         id: textStyle
         Row {
@@ -419,7 +695,7 @@ MouseArea {
         }
     }
 
-    // Style: single pill for the worst usage overall.
+    // === Style: single pill for the worst usage overall =====================
     Component {
         id: worstStyle
         Rectangle {

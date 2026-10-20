@@ -143,6 +143,8 @@ def collect_claude():
     except (TypeError, ValueError):
         pass
 
+    sub_type = str(oauth.get("subscriptionType") or "").strip().upper()
+
     # Identify as the installed Claude Code; the endpoint gates some fields
     # on the client. The token reaches curl... urllib via a header built in
     # process, so it never appears in argv.
@@ -163,20 +165,66 @@ def collect_claude():
     }
     status, data, _ = http_json(CLAUDE_USAGE_URL, headers)
     if status == 0:
-        return {"state": "error", "detail": "Could not reach the Anthropic API"}
+        return {"state": "error", "detail": "Could not reach the Anthropic API", "plan": sub_type}
     if status == 429:
-        return {"state": "rate_limited", "detail": "Rate limited by Anthropic"}
+        return {"state": "rate_limited", "detail": "Rate limited by Anthropic", "plan": sub_type}
     if status in (401, 403):
         return {"state": "token_expired",
-                "detail": "Token rejected. Run claude in a terminal to refresh."}
+                "detail": "Token rejected. Run claude in a terminal to refresh.", "plan": sub_type}
     if status != 200 or not isinstance(data, dict):
-        return {"state": "error", "detail": f"API returned HTTP {status}"}
+        return {"state": "error", "detail": f"API returned HTTP {status}", "plan": sub_type}
     if "error" in data:
         msg = data["error"]
         if isinstance(msg, dict):
             msg = msg.get("message", str(data))
-        return {"state": "error", "detail": str(msg)}
-    return {"state": "ok", "detail": "", "windows": claude_windows(data)}
+        return {"state": "error", "detail": str(msg), "plan": sub_type}
+    extra = data.get("extra_usage")
+    extra_info = None
+    if isinstance(extra, dict):
+        enabled = bool(extra.get("is_enabled"))
+        util = float(extra.get("utilization") or 0.0)
+        used_cents = float(extra.get("used_credits") or 0.0)
+        limit_cents = extra.get("monthly_limit")
+        used_str = f"${used_cents / 100.0:.2f}"
+        if limit_cents is not None:
+            try:
+                used_str += f" / ${float(limit_cents) / 100.0:.2f}"
+            except (TypeError, ValueError):
+                pass
+        reason = extra.get("disabled_reason") or ""
+        status_str = "Enabled" if enabled else (
+            "Out of credits" if reason == "out_of_credits" else "Disabled")
+        extra_info = {
+            "label": "Extra Usage Limit",
+            "enabled": enabled,
+            "status": status_str,
+            "amount": used_str,
+            "percent": round(util, 1),
+        }
+
+    cedar = data.get("cedar_ember")
+    reset_grant = None
+    if isinstance(cedar, dict) and cedar.get("eligible") and isinstance(cedar.get("grants"), list):
+        next_id = cedar.get("next_grant_id")
+        for g in cedar["grants"]:
+            if isinstance(g, dict) and g.get("id") == next_id and (g.get("resets_left") or 0) > 0:
+                reset_grant = {
+                    "id": str(g["id"]),
+                    "label": str(g.get("label") or ""),
+                    "resetsLeft": int(g["resets_left"]),
+                    "resetsTotal": int(g.get("resets_total") or g["resets_left"]),
+                    "endsAt": str(g.get("ends_at") or ""),
+                    "usableNow": bool(g.get("usable_now")),
+                    "atLimit": bool(cedar.get("at_limit")),
+                }
+                break
+
+    result = {"state": "ok", "detail": sub_type, "windows": claude_windows(data)}
+    if extra_info:
+        result["extraUsage"] = extra_info
+    if reset_grant:
+        result["resetGrant"] = reset_grant
+    return result
 
 
 # --- Codex (ChatGPT plan) ---------------------------------------------------
@@ -764,15 +812,27 @@ def collect_commandcode():
     except Exception:
         pass
 
+    extra_info = None
     if isinstance(granted, (int, float)) and isinstance(remaining, (int, float)) \
             and granted > 0:
-        used_pct = min(100.0, max(0.0, (granted - remaining) / granted * 100.0))
+        used = max(0.0, granted - remaining)
+        used_pct = min(100.0, max(0.0, used / granted * 100.0))
         windows.append(window("credits", "Credits", used_pct, ""))
+        extra_info = {
+            "label": "Monthly Credits",
+            "enabled": True,
+            "status": f"${remaining:.2f} left",
+            "amount": f"${used:.2f} / ${granted:.2f}",
+            "percent": round(used_pct, 1),
+        }
 
     if not windows:
         return {"state": "error",
                 "detail": "Command Code returned no readable windows"}
-    return {"state": "ok", "detail": plan_name, "windows": windows}
+    result = {"state": "ok", "detail": plan_name, "windows": windows}
+    if extra_info:
+        result["extraUsage"] = extra_info
+    return result
 
 
 # --- Assembly ---------------------------------------------------------------
@@ -814,8 +874,12 @@ def collect_provider(provider_id, collector):
     cached = load_json(cache_path(provider_id))
     if isinstance(cached, dict) and cached.get("state") == "ok":
         cached["cached"] = True
-        if result.get("detail"):
+        if not cached.get("detail") and result.get("plan"):
+            cached["detail"] = result["plan"]
+        if result.get("detail") and result.get("state") != "rate_limited":
             cached["notice"] = result["detail"]
+        else:
+            cached.pop("notice", None)
         return cached
     result["cached"] = False
     return result

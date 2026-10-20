@@ -12,8 +12,11 @@ KCM.SimpleKCM {
     property alias cfg_warningThreshold: warningSpinBox.value
     property alias cfg_criticalThreshold: criticalSpinBox.value
     property string cfg_panelStyle
+    property string cfg_gaugeLabel
+    property string cfg_panelLabelMode
     property string cfg_colorTheme
     property string cfg_popupStyle
+    property alias cfg_showPace: showPaceBox.checked
     property string cfg_timeFormat
     property alias cfg_showClaude: showClaudeBox.checked
     property alias cfg_showCodex: showCodexBox.checked
@@ -44,11 +47,13 @@ KCM.SimpleKCM {
             textRole: "label"
             valueRole: "value"
             model: [
-                { label: "Rings — round gauge per provider", value: "rings" },
+                { label: "Dual Rings (Claudemeter) — outer + inner limit rings", value: "dual_rings" },
+                { label: "Gauge (Claudemeter) — single ring with time or %", value: "gauge" },
+                { label: "Thermometer Bars (Claudemeter) — pill bars per window", value: "bars" },
+                { label: "Glyph Rings — circular gauge with provider letter", value: "rings" },
                 { label: "Glow — chip brightness = usage", value: "glow" },
                 { label: "Capsule — one segmented strip", value: "capsule" },
                 { label: "Dots — severity dots (smallest)", value: "dots" },
-                { label: "Bars — mini bars per window", value: "bars" },
                 { label: "Letters and percentages", value: "text" },
                 { label: "Single worst usage pill", value: "worst" }
             ]
@@ -57,6 +62,58 @@ KCM.SimpleKCM {
                 var found = currentIndex
                 for (var i = 0; i < model.length; i++) {
                     if (model[i].value === configGeneral.cfg_panelStyle) {
+                        found = i
+                        break
+                    }
+                }
+                currentIndex = found
+            }
+        }
+
+        QQC2.ComboBox {
+            id: gaugeLabelBox
+            Kirigami.FormData.label: "Gauge center text:"
+            visible: configGeneral.cfg_panelStyle === "dual_rings" || configGeneral.cfg_panelStyle === "gauge"
+            textRole: "label"
+            valueRole: "value"
+            model: [
+                { label: "Percentage — \"38%\"", value: "percent" },
+                { label: "Time remaining — \"1h 53m\"", value: "time" },
+                { label: "Provider glyph — \"C / X / G\"", value: "glyph" },
+                { label: "No center text", value: "none" }
+            ]
+            onActivated: configGeneral.cfg_gaugeLabel = currentValue
+            Component.onCompleted: {
+                var found = currentIndex
+                for (var i = 0; i < model.length; i++) {
+                    if (model[i].value === configGeneral.cfg_gaugeLabel) {
+                        found = i
+                        break
+                    }
+                }
+                currentIndex = found
+            }
+        }
+
+        QQC2.ComboBox {
+            id: panelLabelModeBox
+            Kirigami.FormData.label: "Side label:"
+            visible: configGeneral.cfg_panelStyle === "dual_rings"
+                  || configGeneral.cfg_panelStyle === "gauge"
+                  || configGeneral.cfg_panelStyle === "bars"
+            textRole: "label"
+            valueRole: "value"
+            model: [
+                { label: "Plan / tier badge — \"PRO / MAX / PLUS\"", value: "plan" },
+                { label: "Provider letter — \"C / X / G\"", value: "glyph" },
+                { label: "Short name — \"Claude / Codex\"", value: "name" },
+                { label: "None", value: "none" }
+            ]
+            onActivated: configGeneral.cfg_panelLabelMode = currentValue
+            Component.onCompleted: {
+                var found = currentIndex
+                for (var i = 0; i < model.length; i++) {
+                    if (model[i].value === configGeneral.cfg_panelLabelMode) {
                         found = i
                         break
                     }
@@ -76,6 +133,7 @@ KCM.SimpleKCM {
             textRole: "label"
             valueRole: "value"
             model: [
+                { label: "Claudemeter — segmented pace bars & extra usage", value: "claudemeter" },
                 { label: "Cards — one soft panel per provider", value: "cards" },
                 { label: "Compact — dense list with thin bars", value: "compact" },
                 { label: "Grid — small tiles in two columns", value: "grid" }
@@ -93,15 +151,22 @@ KCM.SimpleKCM {
             }
         }
 
+        QQC2.CheckBox {
+            id: showPaceBox
+            Kirigami.FormData.label: "Pace indicator:"
+            text: "Show pace segments, caret marker, and \"Ahead of pace\""
+            visible: configGeneral.cfg_popupStyle === "claudemeter"
+        }
+
         QQC2.ComboBox {
             id: timeFormatBox
             Kirigami.FormData.label: "Updated time:"
             textRole: "label"
             valueRole: "value"
             model: [
-                { label: "Relative — \"2m ago\"", value: "ago" },
-                { label: "12-hour clock", value: "12h" },
-                { label: "24-hour clock", value: "24h" }
+                { label: "24-hour clock — \"14:32:05\"", value: "24h" },
+                { label: "12-hour clock — \"2:32 pm\"", value: "12h" },
+                { label: "Relative — \"Refreshed 2m ago\"", value: "ago" }
             ]
             onActivated: configGeneral.cfg_timeFormat = currentValue
             Component.onCompleted: {
@@ -127,11 +192,14 @@ KCM.SimpleKCM {
             textRole: "label"
             valueRole: "value"
             model: [
-                { label: "Custom (colors below)", value: "custom", normal: "", warning: "" },
-                { label: "Warm (Claude orange)", value: "warm", normal: "#D77757", warning: "#E5C07B" },
+                { label: "Claudemeter Warm (Claude terracotta → gold)", value: "warm", normal: "#D77757", warning: "#E5C07B" },
+                { label: "Claudemeter Sky Blue", value: "sky", normal: "#3DAEE9", warning: "#E5C07B" },
+                { label: "Claudemeter Emerald Green", value: "emerald", normal: "#27AE60", warning: "#E5C07B" },
+                { label: "Claudemeter Amethyst Purple", value: "amethyst", normal: "#9B59B6", warning: "#E5C07B" },
                 { label: "Sunset (pink → amber)", value: "sunset", normal: "#E06C75", warning: "#F5A97F" },
-                { label: "Nord (blue → teal)", value: "nord", normal: "#88C0D0", warning: "#EBCB8B" },
-                { label: "Mono (grayscale)", value: "mono", normal: "#B8BAC2", warning: "#D0D2DA" }
+                { label: "Nord (blue → gold)", value: "nord", normal: "#88C0D0", warning: "#EBCB8B" },
+                { label: "Mono (grayscale)", value: "mono", normal: "#B8BAC2", warning: "#D0D2DA" },
+                { label: "Custom (colors below)", value: "custom", normal: "", warning: "" }
             ]
             onActivated: {
                 configGeneral.cfg_colorTheme = currentValue

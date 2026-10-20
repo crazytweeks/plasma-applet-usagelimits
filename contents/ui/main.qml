@@ -9,7 +9,8 @@ PlasmoidItem {
     id: root
 
     // All provider entries as delivered by collect_usage.py:
-    // [{ id, name, state, detail, windows: [{id,label,percent,resetsAt}], cached, notice }]
+    // [{ id, name, state, detail, windows: [{id,label,percent,resetsAt}],
+    //    extraUsage, resetGrant, cached, notice }]
     property var providers: []
 
     property bool hasError: false
@@ -17,16 +18,21 @@ PlasmoidItem {
     property bool loading: true
     property date lastUpdated: new Date(0)
 
-    // Ticks so reset countdowns keep counting between polls.
+    // Ticks so reset countdowns and pace markers keep counting between polls.
     property date now: new Date()
 
     // --- Config ---
     readonly property int pollInterval: plasmoid.configuration.pollInterval * 1000
     readonly property int warningThreshold: plasmoid.configuration.warningThreshold
     readonly property int criticalThreshold: plasmoid.configuration.criticalThreshold
-    readonly property string panelStyle: plasmoid.configuration.panelStyle
-    readonly property string normalColor: plasmoid.configuration.normalColor
-    readonly property string warningColor: plasmoid.configuration.warningColor
+    readonly property string panelStyle: plasmoid.configuration.panelStyle || "dual_rings"
+    readonly property string gaugeLabel: plasmoid.configuration.gaugeLabel || "percent"
+    readonly property string panelLabelMode: plasmoid.configuration.panelLabelMode || "plan"
+    readonly property string popupStyle: plasmoid.configuration.popupStyle || "claudemeter"
+    readonly property bool showPace: plasmoid.configuration.showPace !== false
+    readonly property string timeFormat: plasmoid.configuration.timeFormat || "24h"
+    readonly property string normalColor: plasmoid.configuration.normalColor || "#D77757"
+    readonly property string warningColor: plasmoid.configuration.warningColor || "#E5C07B"
 
     readonly property var enabledProviders: {
         var flags = {}
@@ -44,8 +50,6 @@ PlasmoidItem {
     property real lastFetchTime: 0
     readonly property int cooldownMs: 60000
 
-    // Providers that should be rendering something: enabled, and either
-    // healthy or reporting a problem the user needs to see.
     function providerEnabled(p) {
         var flags = root.enabledProviders
         return flags[p.id] !== false
@@ -65,8 +69,7 @@ PlasmoidItem {
         return good.concat(bad)
     }
 
-    // Flat row list: every usable window of every enabled provider, used by
-    // the compact representation and the tooltip. Rows carry their provider.
+    // Flat row list: every usable window of every enabled provider.
     readonly property var limitRows: {
         var rows = []
         for (var i = 0; i < root.visibleProviders.length; i++) {
@@ -108,6 +111,111 @@ PlasmoidItem {
         return providerGlyph({ id: providerId, name: providerName })
     }
 
+    // Short plan/tier badge shown beside panel gauges/bars (like MAX / PRO in claudemeter).
+    function providerPlanBadge(p) {
+        if (!p) return ""
+        var d = String(p.detail || "").trim()
+        if (p.id === "claude") return d ? d.toUpperCase() : "PRO"
+        if (p.id === "codex") {
+            var stripped = d.replace(/^ChatGPT\s+/i, "").trim().toUpperCase()
+            return stripped || "PLUS"
+        }
+        if (p.id === "opencode") return "GO"
+        if (p.id === "zai") return "GLM"
+        if (p.id === "antigravity") return "AGY"
+        if (p.id === "commandcode") {
+            return (d && d !== "Command Code") ? d.toUpperCase() : "CMD"
+        }
+        return providerGlyph(p)
+    }
+
+    function providerShortName(p) {
+        if (!p) return ""
+        var map = {
+            "claude": "Claude",
+            "codex": "Codex",
+            "opencode": "Go",
+            "zai": "Z.ai",
+            "antigravity": "Agy",
+            "commandcode": "Cmd"
+        }
+        return map[p.id] || p.name || ""
+    }
+
+    // Claudemeter-style section heading ("Claude Code Usage - MAX", "Codex Usage - PLUS", etc.)
+    function providerHeaderTitle(p) {
+        if (!p) return ""
+        if (p.state !== "ok") return providerRowLabel(p)
+        var d = String(p.detail || "").trim()
+        if (p.id === "claude") {
+            return "Claude Code Usage" + (d ? " - " + d.toUpperCase() : "")
+        }
+        if (p.id === "codex") {
+            var tier = d.replace(/^ChatGPT\s+/i, "").trim().toUpperCase()
+            return "Codex Usage" + (tier ? " - " + tier : "")
+        }
+        if (p.id === "opencode") return "OpenCode Go Usage"
+        if (p.id === "zai") {
+            return "Z.ai Usage" + (d ? " - " + d : "")
+        }
+        if (p.id === "antigravity") return "Antigravity Usage"
+        if (p.id === "commandcode") {
+            var plan = (d && d !== "Command Code") ? " - " + d.toUpperCase() : ""
+            return "Command Code Usage" + plan
+        }
+        return p.name + " Usage"
+    }
+
+    // Descriptive window label for Claudemeter popup bars ("5-Hour Window", "Weekly (All Models)", etc.)
+    function windowFullLabel(win) {
+        if (!win) return ""
+        var id = String(win.id || "")
+        var lbl = String(win.label || "")
+        if (lbl === "5h" || id === "five_hour" || id === "rolling") return "5-Hour Window"
+        if (lbl === "7d" || id === "seven_day") return "Weekly (All Models)"
+        if (lbl === "Weekly" || id === "weekly") return "Weekly Window"
+        if (lbl === "Monthly" || id === "monthly") return "Monthly Window"
+        if (lbl === "Claude/GPT 5h") return "Claude / GPT (5-Hour)"
+        if (lbl === "Claude/GPT Weekly") return "Claude / GPT (Weekly)"
+        if (lbl === "Gemini 5h") return "Gemini (5-Hour)"
+        if (lbl === "Gemini Weekly") return "Gemini (Weekly)"
+        if (lbl === "MCP") return "MCP Tool Quota"
+        if (lbl === "Credits") return "Monthly Credits"
+        return lbl
+    }
+
+    // Number of pace segments for a window (5 for 5h, 7 for 7d/weekly, 6 for monthly).
+    function windowSegments(win) {
+        if (!win) return 0
+        var id = String(win.id || "")
+        var lbl = String(win.label || "")
+        if (id === "five_hour" || id === "rolling" || /5h|5-hour/i.test(lbl)) return 5
+        if (id === "seven_day" || id === "weekly" || id === "weekly_scoped" || /7d|weekly/i.test(lbl)) return 7
+        if (id === "monthly" || /monthly/i.test(lbl)) return 6
+        return 0
+    }
+
+    // Window duration in milliseconds for computing elapsed pace fraction.
+    function windowDurationMs(win) {
+        if (!win) return 0
+        var id = String(win.id || "")
+        var lbl = String(win.label || "")
+        if (id === "five_hour" || id === "rolling" || /5h|5-hour/i.test(lbl)) return 5 * 60 * 60 * 1000
+        if (id === "seven_day" || id === "weekly" || id === "weekly_scoped" || /7d|weekly/i.test(lbl)) return 7 * 24 * 60 * 60 * 1000
+        if (id === "monthly" || /monthly/i.test(lbl)) return 30 * 24 * 60 * 60 * 1000
+        return 0
+    }
+
+    // Fraction 0..1 of a window that has elapsed, or -1 when unknown.
+    function paceFraction(resetsAt, windowMs) {
+        if (!resetsAt || !windowMs) return -1
+        var end = new Date(resetsAt).getTime()
+        if (isNaN(end)) return -1
+        var elapsed = windowMs - (end - root.now.getTime())
+        if (elapsed < 0 || elapsed > windowMs) return -1
+        return elapsed / windowMs
+    }
+
     // Highest window percentage of one provider (for marks and accents).
     function providerWorst(p) {
         var windows = toArray(p ? p.windows : [])
@@ -120,13 +228,10 @@ PlasmoidItem {
 
     function usageColor(percent) {
         if (percent >= root.criticalThreshold) return Kirigami.Theme.negativeTextColor
-        if (percent >= root.warningThreshold) return plasmoid.configuration.warningColor || "#E5C07B"
-        return plasmoid.configuration.normalColor || "#D77757"
+        if (percent >= root.warningThreshold) return root.warningColor
+        return root.normalColor
     }
 
-    // Values read back from a `property var` cross a QVariant boundary and
-    // arrive as array-like QVariantLists that Array.isArray() rejects, so
-    // accept anything with a length instead.
     function toArray(value) {
         if (!value) return []
         if (value.length !== undefined) return value
@@ -145,17 +250,15 @@ PlasmoidItem {
         if (!isoString) return ""
         var d = new Date(isoString)
         if (isNaN(d.getTime())) return ""
-        var diffMin = Math.floor((d.getTime() - root.now.getTime()) / 60000)
-        if (diffMin <= 0) return "expiring"
+        var diffMs = d.getTime() - root.now.getTime()
+        if (diffMs <= 0) return "expired"
+        var diffMin = Math.floor(diffMs / 60000)
         var hrs = Math.floor(diffMin / 60)
         if (hrs >= 24) return Math.floor(hrs / 24) + "d " + (hrs % 24) + "h"
         if (hrs > 0) return hrs + "h " + (diffMin % 60) + "m"
         return diffMin + "m"
     }
 
-    // The DataSource runs commands through `sh -c`, so single-quote every
-    // part. The key never hits argv: collect_usage.py reads it from where
-    // each CLI stores it.
     function shellQuote(text) {
         return "'" + String(text).replace(/'/g, "'\\''") + "'"
     }
@@ -246,9 +349,6 @@ PlasmoidItem {
     }
 
     // --- Widget setup ---
-    // No hover tooltip on the panel: the plain-text list looked bad and the
-    // popup is one click away — hover focus stays clean.
-
     switchWidth: Kirigami.Units.gridUnit * 12
     switchHeight: Kirigami.Units.gridUnit * 10
 

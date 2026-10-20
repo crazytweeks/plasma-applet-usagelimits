@@ -7,25 +7,27 @@ import org.kde.kirigami as Kirigami
 Item {
     id: full
 
+    readonly property string popupStyle: root.popupStyle
+    readonly property bool isClaudemeter: popupStyle === "claudemeter"
+    readonly property bool showTopToolbar: !isClaudemeter || root.visibleProviders.length === 0
+
     // Popup sizing: width fixed, height bounded so the dialog never leaves
     // the screen — everything inside scrolls.
-    readonly property real scrollCap: Kirigami.Units.gridUnit * 14.5
-    readonly property real contentNeeded: content.implicitHeight + Kirigami.Units.smallSpacing * 1.4
-    implicitWidth: Kirigami.Units.gridUnit * 26
-    implicitHeight: header.implicitHeight
+    readonly property real scrollCap: Kirigami.Units.gridUnit * 20
+    readonly property real contentNeeded: content.implicitHeight + Kirigami.Units.smallSpacing * 2
+    implicitWidth: isClaudemeter ? Kirigami.Units.gridUnit * 21 : Kirigami.Units.gridUnit * 25
+    implicitHeight: (showTopToolbar ? header.implicitHeight : 0)
                     + (root.hasError ? errorLabel.implicitHeight : 0)
                     + Math.min(contentNeeded, scrollCap)
                     + footer.implicitHeight
-                    + Kirigami.Units.smallSpacing * 5
+                    + Kirigami.Units.smallSpacing * 4
 
-    property string popupStyle: plasmoid.configuration.popupStyle || "cards"
-    // --- Shared visuals ---
     function barHeight() {
         return Math.max(Kirigami.Units.gridUnit * 0.28, 6)
     }
 
     /**
-     * One usage row: label • countdown • thin filled bar • percent.
+     * Compact inline usage row used by Cards, Compact, and Grid popup layouts.
      */
     component UsageRow: RowLayout {
         required property var win
@@ -75,7 +77,7 @@ Item {
         }
     }
 
-    /** Round initials chip used as the provider mark in every style. */
+    /** Round initials chip used as the provider mark in Cards/Compact styles. */
     component ProviderMark: Rectangle {
         id: mark
         required property var provider
@@ -100,6 +102,7 @@ Item {
 
     ColumnLayout {
         id: header
+        visible: full.showTopToolbar
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
@@ -131,7 +134,7 @@ Item {
 
     QQC2.Label {
         id: errorLabel
-        anchors.top: header.bottom
+        anchors.top: full.showTopToolbar ? header.bottom : parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         Layout.fillWidth: true
@@ -143,11 +146,11 @@ Item {
 
     QQC2.ScrollView {
         id: scroller
-        anchors.top: root.hasError ? errorLabel.bottom : header.bottom
+        anchors.top: root.hasError ? errorLabel.bottom : (full.showTopToolbar ? header.bottom : parent.top)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: footer.top
-        anchors.topMargin: Kirigami.Units.smallSpacing
+        anchors.topMargin: full.showTopToolbar ? Kirigami.Units.smallSpacing : 0
         clip: true
 
         ColumnLayout {
@@ -160,6 +163,7 @@ Item {
             Loader {
                 Layout.fillWidth: true
                 sourceComponent: {
+                    if (full.popupStyle === "claudemeter") return claudemeterList
                     if (full.popupStyle === "compact") return compactList
                     if (full.popupStyle === "grid") return gridStyle
                     return cardList
@@ -195,19 +199,231 @@ Item {
         id: footer
         anchors.bottom: parent.bottom
         anchors.right: parent.right
+        anchors.rightMargin: Kirigami.Units.smallSpacing
         visible: !root.hasError && !root.loading
+        font: Kirigami.Theme.smallFont
+        color: Kirigami.Theme.disabledTextColor
         text: {
             var t = root.lastUpdated
-            var mode = plasmoid.configuration.timeFormat || "ago"
+            var mode = root.timeFormat
             if (mode === "ago" || tick === undefined) {
                 var diff = Math.max(0, (Date.now() - t.getTime()) / 1000)
                 if (diff < 60) return "Refreshed " + Math.floor(diff) + "s ago"
                 if (diff < 3600) return "Refreshed " + Math.floor(diff / 60) + "m ago"
                 return "Refreshed " + Math.floor(diff / 3600) + "h ago"
             }
-            return "Updated " + Qt.formatTime(t, mode === "12h" ? "h:mm ap" : "hh:mm")
+            return "Updated " + Qt.formatTime(t, mode === "12h" ? "h:mm ap" : "hh:mm:ss")
         }
-        opacity: 0.5
+    }
+
+    // === Style: claudemeter — segmented pace bars, caret markers & extra usage ===
+
+    Component {
+        id: claudemeterList
+        ColumnLayout {
+            width: parent ? parent.width : 0
+            spacing: Kirigami.Units.smallSpacing * 1.4
+
+            Repeater {
+                model: root.visibleProviders
+
+                ColumnLayout {
+                    id: cmSection
+                    required property var modelData
+                    required property int index
+                    readonly property var provider: modelData
+                    readonly property bool isOk: provider.state === "ok"
+                    readonly property var rawWindows: isOk ? root.toArray(provider.windows) : []
+                    readonly property var extra: (isOk && provider.extraUsage) ? provider.extraUsage : null
+                    readonly property bool hasExtra: extra !== null && (extra.enabled === true || provider.id === "claude")
+                    readonly property var grant: (isOk && provider.resetGrant) ? provider.resetGrant : null
+                    readonly property var displayWindows: {
+                        var list = []
+                        for (var i = 0; i < rawWindows.length; i++) {
+                            if (hasExtra && rawWindows[i].id === "credits") continue
+                            list.push(rawWindows[i])
+                        }
+                        return list
+                    }
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing * 1.5
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing * 0.5
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing * 0.5
+                        visible: cmSection.index > 0
+                    }
+
+                    // Header row ("Claude Code Usage - PRO   [↻]")
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: cmSection.index === 0 ? Kirigami.Units.smallSpacing * 0.5 : 0
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Heading {
+                            text: root.providerHeaderTitle(cmSection.provider)
+                            level: 4
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+
+                        QQC2.Label {
+                            visible: cmSection.provider.cached === true
+                            text: "cached"
+                            font: Kirigami.Theme.smallFont
+                            color: Kirigami.Theme.disabledTextColor
+                        }
+
+                        QQC2.ToolButton {
+                            visible: cmSection.index === 0
+                            icon.name: "view-refresh"
+                            onClicked: root.requestFetch("manual")
+                            QQC2.ToolTip.text: "Refresh"
+                            QQC2.ToolTip.visible: hovered
+                            enabled: !root.fetchInFlight
+                            implicitHeight: Kirigami.Units.gridUnit * 1.5
+                            implicitWidth: Kirigami.Units.gridUnit * 1.5
+                        }
+                    }
+
+                    // Notice / error detail
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: cmSection.isOk && cmSection.provider.notice !== undefined && cmSection.provider.notice !== ""
+                        text: cmSection.provider.notice || ""
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.neutralTextColor
+                        wrapMode: Text.WordWrap
+                    }
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: !cmSection.isOk && cmSection.provider.detail !== ""
+                        text: cmSection.provider.detail
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.negativeTextColor
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // Segmented pace bars
+                    Repeater {
+                        model: cmSection.displayWindows
+
+                        UsageBar {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            label: root.windowFullLabel(modelData)
+                            percentage: modelData.percent || 0
+                            barColor: root.usageColor(modelData.percent || 0)
+                            resetTime: root.formatResetTime(modelData.resetsAt)
+                            segments: root.windowSegments(modelData)
+                            pace: root.paceFraction(modelData.resetsAt, root.windowDurationMs(modelData))
+                        }
+                    }
+
+                    // Limit reset block (when present on Claude account)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: cmSection.grant !== null
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Icon {
+                                source: "chronometer-reset"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
+                            QQC2.Label {
+                                text: "Limit reset"
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                font.bold: true
+                                Layout.fillWidth: true
+                            }
+                            QQC2.Label {
+                                text: cmSection.grant ? (cmSection.grant.resetsLeft + " of " + cmSection.grant.resetsTotal + " left") : ""
+                                font: Kirigami.Theme.smallFont
+                                color: Kirigami.Theme.disabledTextColor
+                            }
+                        }
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            visible: cmSection.grant !== null && cmSection.grant.endsAt !== ""
+                            text: cmSection.grant && cmSection.grant.endsAt
+                                ? ("Refills 5-hour and weekly limits · use by " + Qt.formatDate(new Date(cmSection.grant.endsAt), "MMM d"))
+                                : "Refills 5-hour and weekly limits"
+                            font: Kirigami.Theme.smallFont
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    // Extra Usage Limit / Monthly Credits block (cyan bar, like claudemeter)
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: cmSection.hasExtra
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            QQC2.Label {
+                                text: cmSection.extra ? cmSection.extra.label : "Extra Usage Limit"
+                                font: Kirigami.Theme.smallFont
+                                Layout.fillWidth: true
+                            }
+                            QQC2.Label {
+                                text: cmSection.extra ? cmSection.extra.status : ""
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                color: (cmSection.extra && cmSection.extra.enabled)
+                                    ? Kirigami.Theme.positiveTextColor
+                                    : Kirigami.Theme.disabledTextColor
+                            }
+                        }
+
+                        QQC2.Label {
+                            visible: cmSection.extra !== null && cmSection.extra.enabled === true
+                            text: cmSection.extra ? cmSection.extra.amount : ""
+                            font.bold: true
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            color: Kirigami.Theme.activeTextColor
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Kirigami.Units.smallSpacing * 3
+                            radius: height / 2
+                            color: Kirigami.Theme.backgroundColor
+                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.width: 1
+                            visible: cmSection.extra !== null && cmSection.extra.enabled === true && (cmSection.extra.percent || 0) > 0
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: parent.width * Math.min((cmSection.extra ? cmSection.extra.percent : 0) / 100, 1.0)
+                                radius: parent.radius
+                                color: Kirigami.Theme.activeTextColor
+
+                                Behavior on width {
+                                    NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // === Style: cards — one soft panel per provider =========================
@@ -333,6 +549,7 @@ Item {
                 ColumnLayout {
                     id: group
                     required property var modelData
+                    required property int index
                     readonly property var provider: modelData
                     readonly property bool isOk: provider.state === "ok"
                     readonly property var windows: isOk ? root.toArray(provider.windows) : []
