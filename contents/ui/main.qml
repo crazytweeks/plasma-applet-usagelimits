@@ -222,6 +222,21 @@ PlasmoidItem {
     }
 
     // --- Widget setup ---
+    // Panel hover tooltip via Plasma's native tooltip system — QQC2.ToolTip
+    // on the compact representation blinks on panels, this one does not.
+    readonly property string tooltipSummary: {
+        var parts = []
+        var rows = root.limitRows
+        for (var i = 0; i < rows.length; i++) {
+            parts.push("<b>" + rows[i].provider + "</b> " + rows[i].label + " — " + Math.round(rows[i].util) + "%")
+        }
+        if (root.hasError || parts.length === 0) return ""
+        return parts.join("<br>")
+    }
+
+    toolTipMainText: root.hasError ? "" : "AI plan usage"
+    toolTipSubText: root.hasError ? root.errorMessage : root.tooltipSummary
+
     switchWidth: Kirigami.Units.gridUnit * 12
     switchHeight: Kirigami.Units.gridUnit * 10
 

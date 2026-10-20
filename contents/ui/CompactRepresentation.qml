@@ -37,29 +37,16 @@ MouseArea {
         return worst
     }
 
-    readonly property string summaryText: {
-        var parts = []
-        var rows = root.limitRows
-        for (var i = 0; i < rows.length; i++) {
-            parts.push(rows[i].provider + " " + rows[i].label + ": " + Math.round(rows[i].util) + "%")
-        }
-        if (parts.length === 0) return "Usage Limits — no usage data yet"
-        return parts.join("\n")
-    }
-
     onClicked: root.expanded = !root.expanded
     hoverEnabled: true
+
+    // Hover tooltip is handled by PlasmoidItem's native Plasma tooltip in
+    // main.qml — QQC2.ToolTip here is what blinked on the panel.
 
     Layout.minimumWidth: (loader.item ? loader.item.implicitWidth : Kirigami.Units.gridUnit) + compact.pad * 2
     Layout.minimumHeight: Kirigami.Units.gridUnit
     Layout.preferredWidth: Layout.minimumWidth
     Layout.preferredHeight: Layout.minimumHeight
-
-    QQC2.ToolTip {
-        visible: compact.containsMouse
-        delay: Kirigami.Units.longDuration
-        text: root.hasError ? root.errorMessage : compact.summaryText
-    }
 
     Kirigami.Icon {
         visible: root.hasError && (!loader.item || !loader.item.showsData)
