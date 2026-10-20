@@ -1,0 +1,74 @@
+# Usage Limits
+
+A KDE Plasma 6 panel widget that monitors the subscription usage of four AI
+CLIs at once: **Claude Code**, **OpenAI Codex (ChatGPT plan)**, **OpenCode Go**,
+and **Z.ai (GLM Coding Plan)**.
+
+## Features
+
+- All four providers in one widget; each can be shown or hidden in settings
+- Whatever windows each provider reports: 5-hour, weekly, monthly, credits
+- Three panel styles for different panel sizes: mini bars per window,
+  provider letters with percentages, or a single "worst" pill
+- Popup with one card per provider: per-window usage, reset countdowns,
+  plan names, and manual refresh
+- Bars tinted by warning/critical thresholds (configurable colors)
+- Providers are isolated: one failing never hides the others, and a provider
+  that worked recently keeps serving cached data (marked "cached") until a
+  fetch succeeds again
+
+## How It Works
+
+`contents/scripts/collect_usage.py` runs on every poll. It reads each CLI's
+own credentials from where the CLI already stores them and calls each
+provider's own usage endpoint. Nothing is sent anywhere else.
+
+| Provider | Credentials | Endpoint |
+|---|---|---|
+| Claude | `~/.claude/.credentials.json` | `api.anthropic.com/api/oauth/usage` |
+| Codex | `~/.codex/auth.json` (auto-refreshes the token) | `chatgpt.com/backend-api/wham/usage` |
+| OpenCode Go | `~/.local/share/opencode/auth.json` (`opencode-go` key) | `opencode.ai/zen/go/v1/usage` |
+| Z.ai | API key: `~/.config/usagelimits/zai-api-key`, `Z_AI_API_KEY`, or your opencode config | `api.z.ai/api/monitor/usage/quota/limit` |
+
+If a provider isn't signed in, its row says so instead of failing silently.
+Sign in with `claude` / `codex` / `opencode /connect` in a terminal; for
+Z.ai save an API key to `~/.config/usagelimits/zai-api-key`.
+
+> These widgets use internal endpoints that are not public, documented APIs.
+> They may change or stop working without notice.
+
+## Requirements
+
+- KDE Plasma 6
+- `python3` (the collector uses only the standard library)
+
+## Install
+
+```sh
+bash install.sh
+```
+
+Then add **Usage Limits** to your panel (or test standalone with
+`plasmawindowed com.bhuvan.usagelimits`). To see data you need at least one
+of the four CLIs signed in — the widget shows "not signed in" for the rest.
+
+## Uninstall
+
+```sh
+kpackagetool6 -t Plasma/Applet -r com.bhuvan.usagelimits
+```
+
+## Configuration
+
+Right-click the widget and choose **Configure...**:
+
+- **Providers** — show/hide each of the four individually
+- **Panel style** — bars / letters+percentages / worst-pill, sized for
+  anything from thin vertical panels to wide panels
+- Poll interval (default 15 minutes; these endpoints rate-limit hard)
+- Warning / critical thresholds
+- Normal / warning bar colors
+
+## License
+
+MIT

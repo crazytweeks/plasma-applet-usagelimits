@@ -1,0 +1,21 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "com.bhuvan.usagelimits",
+        "Name": "Usage Limits",
+        "Description": "Claude, Codex, OpenCode Go and Z.ai usage limits in your Plasma panel",
+        "Icon": "view-statistics",
+        "Authors": [
+            {
+                "Name": "Bhuvan"
+            }
+        ],
+        "Category": "Utilities",
+        "Version": "0.1.0",
+        "License": "MIT",
+        "Website": "https://github.com/crazytweeks/plasma-applet-usagelimits"
+    },
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml"
+}
