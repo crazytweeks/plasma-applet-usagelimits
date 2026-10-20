@@ -185,6 +185,17 @@ MouseArea {
                                         height: parent.height * Math.min(Math.max(parent.util, 0) / 100, 1.0)
                                         radius: parent.radius
                                         color: root.usageColor(parent.util)
+                                        gradient: Gradient {
+                                            orientation: Gradient.Vertical
+                                            GradientStop {
+                                                position: 0.0
+                                                color: root.usageColor(parent.util)
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: root.useGradient ? root.normalColor : root.usageColor(parent.util)
+                                            }
+                                        }
 
                                         Behavior on height {
                                             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }

@@ -31,8 +31,11 @@ PlasmoidItem {
     readonly property string popupStyle: plasmoid.configuration.popupStyle || "claudemeter"
     readonly property bool showPace: plasmoid.configuration.showPace !== false
     readonly property string timeFormat: plasmoid.configuration.timeFormat || "24h"
+    readonly property bool useGradient: plasmoid.configuration.useGradient !== false
     readonly property string normalColor: plasmoid.configuration.normalColor || "#D77757"
+    readonly property string midColor: plasmoid.configuration.midColor || "#DF9B65"
     readonly property string warningColor: plasmoid.configuration.warningColor || "#E5C07B"
+    readonly property string criticalColor: plasmoid.configuration.criticalColor || "#E06C75"
 
     readonly property var enabledProviders: {
         var flags = {}
@@ -226,10 +229,55 @@ PlasmoidItem {
         return worst
     }
 
+    function parseRgb(c) {
+        if (c && typeof c === "object" && c.r !== undefined) {
+            return [c.r, c.g, c.b]
+        }
+        var s = String(c || "#D77757").trim()
+        if (s.charAt(0) === "#") s = s.slice(1)
+        if (s.length === 8) s = s.slice(2)
+        if (s.length === 6) {
+            var r = parseInt(s.slice(0, 2), 16) / 255
+            var g = parseInt(s.slice(2, 4), 16) / 255
+            var b = parseInt(s.slice(4, 6), 16) / 255
+            if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return [r, g, b]
+        }
+        return [0.843, 0.467, 0.341]
+    }
+
+    function lerpColor(c1, c2, t) {
+        var k = Math.max(0, Math.min(1, t))
+        var a = parseRgb(c1)
+        var b = parseRgb(c2)
+        return Qt.rgba(
+            a[0] + (b[0] - a[0]) * k,
+            a[1] + (b[1] - a[1]) * k,
+            a[2] + (b[2] - a[2]) * k,
+            1.0
+        )
+    }
+
     function usageColor(percent) {
-        if (percent >= root.criticalThreshold) return Kirigami.Theme.negativeTextColor
-        if (percent >= root.warningThreshold) return root.warningColor
-        return root.normalColor
+        var p = Math.max(0, Math.min(100, percent || 0))
+        var midThreshold = root.warningThreshold * 0.5
+        if (!root.useGradient) {
+            if (p >= root.criticalThreshold) return root.criticalColor
+            if (p >= root.warningThreshold) return root.warningColor
+            if (p >= midThreshold) return root.midColor
+            return root.normalColor
+        }
+        if (p <= midThreshold) {
+            return lerpColor(root.normalColor, root.midColor, midThreshold > 0 ? p / midThreshold : 0)
+        }
+        if (p <= root.warningThreshold) {
+            var span1 = Math.max(1, root.warningThreshold - midThreshold)
+            return lerpColor(root.midColor, root.warningColor, (p - midThreshold) / span1)
+        }
+        if (p <= root.criticalThreshold) {
+            var span2 = Math.max(1, root.criticalThreshold - root.warningThreshold)
+            return lerpColor(root.warningColor, root.criticalColor, (p - root.warningThreshold) / span2)
+        }
+        return root.criticalColor
     }
 
     function toArray(value) {

@@ -24,8 +24,11 @@ KCM.SimpleKCM {
     property alias cfg_showZai: showZaiBox.checked
     property alias cfg_showAntigravity: showAntigravityBox.checked
     property alias cfg_showCommandcode: showCommandcodeBox.checked
+    property alias cfg_useGradient: useGradientBox.checked
     property string cfg_normalColor
+    property string cfg_midColor
     property string cfg_warningColor
+    property string cfg_criticalColor
 
     Kirigami.FormLayout {
         QQC2.SpinBox {
@@ -192,20 +195,22 @@ KCM.SimpleKCM {
             textRole: "label"
             valueRole: "value"
             model: [
-                { label: "Claudemeter Warm (Claude terracotta → gold)", value: "warm", normal: "#D77757", warning: "#E5C07B" },
-                { label: "Claudemeter Sky Blue", value: "sky", normal: "#3DAEE9", warning: "#E5C07B" },
-                { label: "Claudemeter Emerald Green", value: "emerald", normal: "#27AE60", warning: "#E5C07B" },
-                { label: "Claudemeter Amethyst Purple", value: "amethyst", normal: "#9B59B6", warning: "#E5C07B" },
-                { label: "Sunset (pink → amber)", value: "sunset", normal: "#E06C75", warning: "#F5A97F" },
-                { label: "Nord (blue → gold)", value: "nord", normal: "#88C0D0", warning: "#EBCB8B" },
-                { label: "Mono (grayscale)", value: "mono", normal: "#B8BAC2", warning: "#D0D2DA" },
-                { label: "Custom (colors below)", value: "custom", normal: "", warning: "" }
+                { label: "Claudemeter Warm (terracotta → amber → gold → crimson)", value: "warm", normal: "#D77757", mid: "#DF9B65", warning: "#E5C07B", critical: "#E06C75" },
+                { label: "Claudemeter Sky Blue (sky → cyan → gold → crimson)", value: "sky", normal: "#3DAEE9", mid: "#56C8D8", warning: "#E5C07B", critical: "#E06C75" },
+                { label: "Claudemeter Emerald (emerald → lime → gold → crimson)", value: "emerald", normal: "#27AE60", mid: "#78C850", warning: "#E5C07B", critical: "#E06C75" },
+                { label: "Claudemeter Amethyst (purple → rose → gold → crimson)", value: "amethyst", normal: "#9B59B6", mid: "#D3689F", warning: "#E5C07B", critical: "#E06C75" },
+                { label: "Sunset (peach → coral → rose → deep red)", value: "sunset", normal: "#F5A97F", mid: "#EE867A", warning: "#E06C75", critical: "#C94A5A" },
+                { label: "Nord (frost blue → green → yellow → red)", value: "nord", normal: "#88C0D0", mid: "#A3BE8C", warning: "#EBCB8B", critical: "#BF616A" },
+                { label: "Mono (grayscale ramp)", value: "mono", normal: "#8E929B", mid: "#B0B4BE", warning: "#D0D3DC", critical: "#F0F2F8" },
+                { label: "Custom (colors below)", value: "custom", normal: "", mid: "", warning: "", critical: "" }
             ]
             onActivated: {
                 configGeneral.cfg_colorTheme = currentValue
                 var entry = model[currentIndex]
                 if (entry && entry.normal) configGeneral.cfg_normalColor = entry.normal
+                if (entry && entry.mid) configGeneral.cfg_midColor = entry.mid
                 if (entry && entry.warning) configGeneral.cfg_warningColor = entry.warning
+                if (entry && entry.critical) configGeneral.cfg_criticalColor = entry.critical
             }
             Component.onCompleted: {
                 var found = currentIndex
@@ -300,9 +305,31 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: "Colors"
         }
 
+        QQC2.CheckBox {
+            id: useGradientBox
+            Kirigami.FormData.label: "Gradient:"
+            text: "Smooth gradient across usage levels and bar fills"
+        }
+
+        Rectangle {
+            Kirigami.FormData.label: "Preview:"
+            implicitWidth: Kirigami.Units.gridUnit * 14
+            implicitHeight: Kirigami.Units.smallSpacing * 3
+            radius: height / 2
+            border.width: 1
+            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: configGeneral.cfg_normalColor || "#D77757" }
+                GradientStop { position: 0.38; color: configGeneral.cfg_midColor || "#DF9B65" }
+                GradientStop { position: 0.75; color: configGeneral.cfg_warningColor || "#E5C07B" }
+                GradientStop { position: 1.0; color: configGeneral.cfg_criticalColor || "#E06C75" }
+            }
+        }
+
         KQC.ColorButton {
-            Kirigami.FormData.label: "Normal color:"
-            color: configGeneral.cfg_normalColor
+            Kirigami.FormData.label: "Low color (0%):"
+            color: configGeneral.cfg_normalColor || "#D77757"
             onColorChanged: {
                 if (String(color) !== configGeneral.cfg_normalColor) {
                     configGeneral.cfg_normalColor = String(color)
@@ -312,11 +339,33 @@ KCM.SimpleKCM {
         }
 
         KQC.ColorButton {
+            Kirigami.FormData.label: "Medium color (~40%):"
+            color: configGeneral.cfg_midColor || "#DF9B65"
+            onColorChanged: {
+                if (String(color) !== configGeneral.cfg_midColor) {
+                    configGeneral.cfg_midColor = String(color)
+                    configGeneral.cfg_colorTheme = "custom"
+                }
+            }
+        }
+
+        KQC.ColorButton {
             Kirigami.FormData.label: "Warning color:"
-            color: configGeneral.cfg_warningColor
+            color: configGeneral.cfg_warningColor || "#E5C07B"
             onColorChanged: {
                 if (String(color) !== configGeneral.cfg_warningColor) {
                     configGeneral.cfg_warningColor = String(color)
+                    configGeneral.cfg_colorTheme = "custom"
+                }
+            }
+        }
+
+        KQC.ColorButton {
+            Kirigami.FormData.label: "Critical color:"
+            color: configGeneral.cfg_criticalColor || "#E06C75"
+            onColorChanged: {
+                if (String(color) !== configGeneral.cfg_criticalColor) {
+                    configGeneral.cfg_criticalColor = String(color)
                     configGeneral.cfg_colorTheme = "custom"
                 }
             }

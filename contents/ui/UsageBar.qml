@@ -24,8 +24,10 @@ ColumnLayout {
     // Stepped up to critical once the bar itself is warning-coloured, or the split
     // would be yellow-on-yellow and invisible above the warning threshold.
     readonly property color overPaceColor: usageBar.percentage >= root.warningThreshold
-        ? Kirigami.Theme.negativeTextColor
-        : (root.warningColor || "#E5C07B")
+        ? root.criticalColor
+        : root.warningColor
+    readonly property real basePercent: usageBar.overPace ? (usageBar.pace * 100) : usageBar.percentage
+    readonly property color baseEndColor: root.usageColor(basePercent)
     // Opaque, so it reads the same over the track and over a coloured fill; same
     // 0.2-alpha-of-textColor recipe as the track border.
     readonly property color guideColor: Qt.tint(Kirigami.Theme.backgroundColor,
@@ -98,7 +100,22 @@ ColumnLayout {
             anchors.bottom: parent.bottom
             width: parent.width * (usageBar.overPace ? usageBar.pace : usageBar.fill)
             radius: parent.radius
-            color: usageBar.barColor
+            color: usageBar.baseEndColor
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop {
+                    position: 0.0
+                    color: root.useGradient ? root.normalColor : usageBar.baseEndColor
+                }
+                GradientStop {
+                    position: 0.5
+                    color: root.useGradient ? root.usageColor(usageBar.basePercent * 0.5) : usageBar.baseEndColor
+                }
+                GradientStop {
+                    position: 1.0
+                    color: usageBar.baseEndColor
+                }
+            }
 
             Behavior on width {
                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic }

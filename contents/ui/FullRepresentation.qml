@@ -63,6 +63,21 @@ Item {
                 width: parent.width * Math.min(100, Math.max(0, win.percent)) / 100
                 radius: parent.radius
                 color: root.usageColor(win.percent)
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 0.0
+                        color: root.useGradient ? root.normalColor : root.usageColor(win.percent)
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: root.useGradient ? root.usageColor((win.percent || 0) * 0.5) : root.usageColor(win.percent)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: root.usageColor(win.percent)
+                    }
+                }
                 Behavior on width { NumberAnimation { duration: Kirigami.Units.shortDuration; easing.type: Easing.OutCubic } }
             }
         }

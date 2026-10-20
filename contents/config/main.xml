@@ -46,13 +46,25 @@
             <label>Updated-time style: ago (relative), 12h, or 24h</label>
             <default>24h</default>
         </entry>
+        <entry name="useGradient" type="Bool">
+            <label>Use smooth color gradient across usage levels and bars</label>
+            <default>true</default>
+        </entry>
         <entry name="normalColor" type="String">
-            <label>Normal usage bar color</label>
+            <label>Low usage bar color (0%)</label>
             <default>#D77757</default>
+        </entry>
+        <entry name="midColor" type="String">
+            <label>Medium usage bar color</label>
+            <default>#DF9B65</default>
         </entry>
         <entry name="warningColor" type="String">
             <label>Warning usage bar color</label>
             <default>#E5C07B</default>
+        </entry>
+        <entry name="criticalColor" type="String">
+            <label>Critical usage bar color</label>
+            <default>#E06C75</default>
         </entry>
         <entry name="showClaude" type="Bool">
             <label>Show the Claude provider</label>
