@@ -692,7 +692,7 @@ Item {
                                         text: root.providerGlyph(tile.provider)
                                         font.bold: true
                                         color: tile.isOk ? Kirigami.Theme.disabledTextColor
-                                                         : Kirigami.Theme.negativeTextColor
+                                                     : Kirigami.Theme.negativeTextColor
                                     }
 
                                     QQC2.Label {

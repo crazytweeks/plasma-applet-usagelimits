@@ -9,9 +9,9 @@ MouseArea {
     id: compact
 
     // Styles:
-    // "dual_rings" — Claudemeter concentric outer + inner gauge rings
-    // "gauge"      — Claudemeter single gauge ring with time/percent/glyph
-    // "bars"       — Claudemeter vertical pill thermometer bars
+    // "dual_rings" — concentric outer + inner gauge rings per provider
+    // "gauge"      — single gauge ring with time/percent/glyph
+    // "bars"       — vertical pill thermometer bars
     // "rings"      — circular gauge with provider letter
     // "glow"       — brightness chips
     // "dots"       — severity dots
@@ -24,7 +24,7 @@ MouseArea {
     readonly property int gaugeSize: Math.max(20, Math.min(34, compact.height - 2))
     readonly property real pad: Kirigami.Units.smallSpacing * 1.5
     readonly property bool isDark: Kirigami.Theme.backgroundColor.hslLightness < 0.5
-    readonly property color trackColor: isDark ? "#33373B" : "#E5E7E8"
+    readonly property color trackColor: isDark ? "#2A2D30" : "#EEF0F1"
 
     function glyph(p) {
         return root.providerGlyph(p)
@@ -119,7 +119,7 @@ MouseArea {
         }
     }
 
-    // === Style: Claudemeter Thermometer Bars ===============================
+    // === Style: Thermometer Bars ===============================
     Component {
         id: barsStyle
         Item {
@@ -219,7 +219,7 @@ MouseArea {
         }
     }
 
-    // === Style: Claudemeter Dual Rings (Outer + Inner Concentric Gauge) =====
+    // === Style: Dual Rings (Outer + Inner Concentric Gauge) =====
     Component {
         id: dualRingsStyle
         Item {
@@ -359,7 +359,7 @@ MouseArea {
         }
     }
 
-    // === Style: Claudemeter Single Gauge ====================================
+    // === Style: Single Gauge ====================================
     Component {
         id: gaugeStyle
         Item {

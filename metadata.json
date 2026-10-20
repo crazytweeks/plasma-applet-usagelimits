@@ -3,7 +3,7 @@
     "KPlugin": {
         "Id": "com.crazytweeks.usagelimits",
         "Name": "Usage Limits",
-        "Description": "Claude, Codex, OpenCode Go, Z.ai, Antigravity and Command Code usage limits in your Plasma panel",
+        "Description": "Six AI provider usage limits in one Plasma 6 panel — pace bars, credit pools, and per-provider themes",
         "Icon": "view-statistics",
         "Authors": [
             {

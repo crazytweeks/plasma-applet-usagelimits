@@ -3,63 +3,73 @@
 [![Plasma 6](https://img.shields.io/badge/Plasma-6-1d99f3?logo=kde)](https://kde.org/plasma-desktop/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-d77757.svg)](LICENSE)
 [![Providers](https://img.shields.io/badge/AI%20Providers-6-27ae60)](#supported-providers)
+[![KDE Store](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fapi.kde-look.org%2Focs%2Fv1%2Fcontent%2Fdata%2F2348058&query=%2F%2Fversion&prefix=Get%20v&label=KDE%20Store&logo=kde&color=1d99f3)](https://store.kde.org/p/2348058/)
 
-A KDE Plasma 6 panel & desktop widget that tracks your live subscription rate limits and credit pools across **6 AI coding providers** in one place:
+Six AI coding assistants. One Plasma 6 panel. Live rate limits, credit pools, and pace tracking without a daemon.
 
-- **Claude Code** (Pro / Max / Team — 5-hour window, weekly all-models, scoped model weeklies, Extra Usage, and limit resets)
-- **OpenAI Codex** (ChatGPT Plus / Pro / Team — 5-hour and 7-day windows with automatic token refresh)
-- **OpenCode Go** (5-hour rolling, weekly, and monthly windows)
-- **Z.ai** (GLM Coding Plan — 5-hour, weekly/monthly, and MCP tool quotas)
-- **Google Antigravity** (Claude/GPT and Gemini 5-hour & weekly quota buckets)
-- **Command Code** (Go / Pro / GOAT / Max / Ultra — 5-hour & weekly rate limits + monthly credit pool)
+![Usage Limits in a Plasma 6 panel with the popup open](docs/screenshots/hero-dark.png)
 
-![Usage Limits in a Plasma 6 panel with the Claudemeter popup open](docs/screenshots/hero-dark.png)
+## At a glance
 
-## Features
+| | |
+|---|---|
+| **Providers** | Claude Code, Codex, OpenCode Go, Z.ai, Antigravity, Command Code |
+| **What it reads** | Each CLI's own sign-in file — no extra daemon, no third-party service |
+| **Panel** | Dual rings, thermometer bars, single gauge, glow chips, glyph rings, capsule strip, severity dots, text, worst pill |
+| **Popup** | Claudemeter pace bars, Cards, Compact, Grid Tiles layouts |
+| **Themes** | 7 color presets + custom 4-stop gradients |
 
-<img src="docs/screenshots/popup-dark.png" alt="Expanded popup with segmented pace bars, ahead-of-pace split fills, and extra usage" width="340" align="right">
+## What each provider shows
 
-- **Six AI providers in one applet** — reads credentials directly from each CLI's existing sign-in file (`~/.claude`, `~/.codex`, `~/.local/share/opencode`, `~/.commandcode`, T3 / `agy` OAuth). No extra daemon or third-party service required.
-- **Segmented Pace Bars & "Ahead of pace"** — inspired by [plasma-applet-claudemeter](https://github.com/p3kj/plasma-applet-claudemeter):
-  - 5-hour windows are split into **5 hourly segments**; weekly windows into **7 daily segments**; monthly windows into **6 segments**.
-  - A vertical caret marks the exact current position in the window, with the active segment softly highlighted.
-  - Usage that runs past the caret steps up in color and displays **Ahead of pace** beneath the bar.
-- **4-Stop Smooth Color Gradients** — customize **Low (0%)**, **Medium (~40%)**, **Warning**, and **Critical** colors with a live gradient preview bar in Settings, or pick from 7 built-in themes (*Claudemeter Warm*, *Sky Blue*, *Emerald*, *Amethyst*, *Sunset*, *Nord*, *Mono*).
-- **Extra Usage & Monthly Credits** — dedicated cyan progress bars for Claude's Extra Usage limit and Command Code's monthly credit pool (`$used / $granted` and remaining balance).
-- **Resilient per-provider caching** — each provider is isolated in `~/.cache/usagelimits/<provider>.json`. If an endpoint rate-limits (`HTTP 429`) or is temporarily unreachable, the widget serves the last known state and marks it `cached`.
+| Provider | Credentials | What's tracked |
+|---|---|---|
+| **Claude Code** | `~/.claude/.credentials.json` | 5-hour, weekly, Extra Usage, limit reset |
+| **OpenAI Codex** | `~/.codex/auth.json` | 5-hour, 7-day, automatic token refresh |
+| **OpenCode Go** | `~/.local/share/opencode/auth.json` | 5-hour rolling, weekly, monthly |
+| **Z.ai** | `~/.config/usagelimits/zai-api-key` or env | 5-hour, monthly, MCP quota |
+| **Antigravity** | OAuth JSON or T3 `acp_token.json` | Claude/GPT 5h, Gemini 5h |
+| **Command Code** | `~/.commandcode/auth.json` | 5-hour, weekly, monthly credits |
 
-<br clear="right"/>
+Every provider caches its last-known state locally, so a rate-limit or outage shows `cached` data instead of a blank bar.
 
-## Panel Styles & Color Themes
+## Panel styles
 
-Choose from **9 compact panel representations** designed for everything from thin vertical bars to wide desktop panels:
+Pick from nine compact representations in **Configure Usage Limits… → Panel style**:
 
-- **Dual Rings (Claudemeter)** — concentric outer (5-hour) and inner (weekly/monthly) `Charts.PieChart` rings per provider, with optional plan badges (`PRO`, `MAX`, `PLUS`, `GO`, `GLM`, `AGY`, `GOAT`)
-- **Thermometer Bars (Claudemeter)** — rounded vertical pill bars for every window of each provider
-- **Single Gauge (Claudemeter)** — single smooth ring showing time-to-reset (`1h 53m`), percentage (`38%`), or provider glyph inside
-- **Glow Chips & Glyph Rings** — compact provider badges (`C`, `X`, `G`, `Z`, `A`, `◆`) whose brightness or arc reflects the tightest window
-- **Capsule Strip, Severity Dots, Text & Worst Pill** — minimal-footprint indicators for crowded panels
+- **Dual Rings** — concentric 5-hour + weekly rings per provider, with plan badges (`PRO`, `MAX`, `PLUS`, `GO`, `GLM`, `AGY`, `GOAT`)
+- **Thermometer Bars** — rounded vertical pills per window
+- **Single Gauge** — one ring showing time-to-reset, percentage, or provider glyph
+- **Glow Chips** — provider badges whose brightness tracks the tightest window
+- **Glyph Rings** — circular gauges with provider letters
+- **Capsule Strip** — one segmented strip, one slot per provider
+- **Severity Dots** — one dot per provider, colored by usage
+- **Text** — letters plus percentages in a row
+- **Worst Pill** — a single pill for the highest usage overall
 
-![Panel styles and 4-stop gradient color themes](docs/screenshots/styles-dark.png)
+![Nine panel styles and four-stop gradient color themes](docs/screenshots/styles-dark.png)
 
-## Popup Layouts
+## Popup layouts
 
-Switch between **4 expanded popup layouts** (*Claudemeter*, *Cards*, *Compact*, and *Grid Tiles*) in **Configure Usage Limits… → Expanded popup**:
+Switch between four expanded popups in **Configure Usage Limits… → Expanded popup**:
+
+- **Claudemeter** — segmented pace bars with a current-time caret and *Ahead of pace* split fills
+- **Cards** — one soft panel per provider with provider mark chips
+- **Compact** — dense provider list, no boxes
+- **Grid Tiles** — small two-column provider tiles
+
+Each popup also shows Extra Usage / Monthly Credits bars, reset counts, and update time.
 
 ![Popup layouts: Claudemeter, Cards, and Grid Tiles](docs/screenshots/popups-dark.png)
 
-## Supported Providers
+## Color themes
 
-| Provider | Where credentials are read from | Endpoint queried |
-|---|---|---|
-| **Claude Code** | `~/.claude/.credentials.json` (`$CLAUDE_CONFIG_DIR` override) | `api.anthropic.com/api/oauth/usage` |
-| **OpenAI Codex** | `~/.codex/auth.json` (`$CODEX_HOME` override; refreshes expired tokens in-place) | `chatgpt.com/backend-api/wham/usage` |
-| **OpenCode Go** | `~/.local/share/opencode/auth.json` (`opencode-go.key`) | `opencode.ai/zen/go/v1/usage` |
-| **Z.ai (GLM)** | `~/.config/usagelimits/zai-api-key`, `$Z_AI_API_KEY`, or `~/.config/opencode/opencode.json` MCP env | `api.z.ai/api/monitor/usage/quota/limit` |
-| **Antigravity** | `~/.config/usagelimits/antigravity-oauth.json`, `~/.codexbar/antigravity/oauth_creds.json`, or T3 Code's `acp_token.json` | `daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary` |
-| **Command Code** | `~/.commandcode/auth.json` (`cmd login`), `$COMMAND_CODE_API_KEY`, or `~/.config/usagelimits/commandcode-api-key` | `api.commandcode.ai/alpha/billing/credits` + `/billing/subscriptions` |
+Choose from seven built-in palettes or set your own four-stop gradient:
 
-> **Note:** Several of these endpoints are internal/undocumented CLI endpoints and may change without notice. Credentials are read locally and sent only to each provider's own official API.
+- *Claudemeter Warm* — coral → amber → yellow → red
+- *Sky Blue*, *Emerald*, *Amethyst*, *Sunset*, *Nord*, *Mono*
+- *Custom* — your own low / medium / warning / critical colors
+
+The default widget colors follow the chosen theme across bars, arcs, and dots.
 
 ## Installation
 
@@ -92,29 +102,29 @@ Right-click the widget and select **Configure Usage Limits…**:
 
 | Setting | Description | Default |
 |---|---|---|
-| **Panel style** | Dual Rings, Single Gauge, Thermometer Bars, Glyph Rings, Glow Chips, Capsule Strip, Severity Dots, Text, or Worst Pill | `Dual Rings` |
-| **Gauge center text** | Percentage (`38%`), Time remaining (`1h 53m`), Provider glyph (`C`), or None | `Percentage` |
-| **Side label** | Plan / tier badge (`PRO`, `MAX`, `PLUS`, `GO`, `GLM`, `AGY`, `GOAT`), Provider letter, Short name, or None | `Plan badge` |
-| **Popup layout** | `Claudemeter` (segmented pace bars), `Cards`, `Compact`, or `Grid` | `Claudemeter` |
-| **Pace indicator** | Show hourly/daily segments, current-time caret marker, and *Ahead of pace* split fill | `On` |
-| **Updated time** | `24-hour clock`, `12-hour clock`, or `Relative ("Refreshed 2m ago")` | `24-hour` |
-| **Theme** | *Claudemeter Warm*, *Sky Blue*, *Emerald*, *Amethyst*, *Sunset*, *Nord*, *Mono*, or *Custom* | `Claudemeter Warm` |
-| **Smooth gradient** | Interpolate across all 4 color stops and render linear bar gradients | `On` |
-| **Low / Medium / Warning / Critical colors** | 4 independent color pickers for the usage ramp | `#D77757` / `#DF9B65` / `#E5C07B` / `#E06C75` |
-| **Providers** | Individual toggles for Claude, Codex, OpenCode Go, Z.ai, Antigravity, and Command Code | All `On` |
-| **Poll interval** | Seconds between background polls (`60`–`3600`) | `900` (15m) |
+| Panel style | Dual Rings, Single Gauge, Thermometer Bars, Glyph Rings, Glow Chips, Capsule Strip, Severity Dots, Text, or Worst Pill | `Dual Rings` |
+| Gauge center text | Percentage, Time remaining, Provider glyph, or None | `Percentage` |
+| Side label | Plan badge, Provider letter, Short name, or None | `Plan badge` |
+| Popup layout | Claudemeter, Cards, Compact, or Grid | `Claudemeter` |
+| Pace indicator | Hourly/daily segments, caret marker, *Ahead of pace* split fill | `On` |
+| Updated time | 24-hour clock, 12-hour clock, or Relative | `24-hour` |
+| Theme | Claudemeter Warm, Sky Blue, Emerald, Amethyst, Sunset, Nord, Mono, or Custom | `Claudemeter Warm` |
+| Smooth gradient | Interpolate across all 4 color stops | `On` |
+| Low / Medium / Warning / Critical colors | 4 independent color pickers | `#D77757` / `#DF9B65` / `#E5C07B` / `#E06C75` |
+| Providers | Individual toggles for all 6 | All `On` |
+| Poll interval | Seconds between polls (60–3600) | `900` (15m) |
 
-## Re-rendering Screenshots
+## Re-rendering screenshots
 
-To regenerate the high-DPI showcase images in `docs/screenshots/` from the live QML components:
+Regenerate the high-DPI showcase images in `docs/screenshots/` from the live QML components:
 
 ```sh
 python3 tools/screenshots/render.py
 ```
 
-## Acknowledgements
+## Design inspiration
 
-Panel gauges, thermometer bars, and segmented pace bars are inspired by and adapted from [p3kj/plasma-applet-claudemeter](https://github.com/p3kj/plasma-applet-claudemeter) (MIT).
+Panel gauges, thermometer bars, and segmented pace bars are inspired by [p3kj/plasma-applet-claudemeter](https://github.com/p3kj/plasma-applet-claudemeter) — the one theme we borrowed is credited there.
 
 ## License
 
