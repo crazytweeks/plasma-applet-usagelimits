@@ -19,8 +19,12 @@
             <default>95</default>
         </entry>
         <entry name="panelStyle" type="String">
-            <label>Panel display style: bars, text, or worst</label>
-            <default>bars</default>
+            <label>Panel display style: bars, text, worst, rings, glow, dots, or capsule</label>
+            <default>rings</default>
+        </entry>
+        <entry name="colorTheme" type="String">
+            <label>Bar color preset: custom, warm, sunset, nord, or mono</label>
+            <default>warm</default>
         </entry>
         <entry name="normalColor" type="String">
             <label>Normal usage bar color</label>

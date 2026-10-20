@@ -8,8 +8,10 @@ and **Z.ai (GLM Coding Plan)**.
 
 - All four providers in one widget; each can be shown or hidden in settings
 - Whatever windows each provider reports: 5-hour, weekly, monthly, credits
-- Three panel styles for different panel sizes: mini bars per window,
-  provider letters with percentages, or a single "worst" pill
+- Three-ish panel styles for different panel sizes and seven in total:
+  **rings** (round gauge per provider), **glow** (chip brightness = usage),
+  **capsule** (one segmented strip), **dots** (smallest), plus the original
+  **bars**, **letters+percentages**, and **worst** pill
 - Popup with one card per provider: per-window usage, reset countdowns,
   plan names, and manual refresh
 - Bars tinted by warning/critical thresholds (configurable colors)
@@ -63,8 +65,9 @@ kpackagetool6 -t Plasma/Applet -r com.bhuvan.usagelimits
 Right-click the widget and choose **Configure...**:
 
 - **Providers** — show/hide each of the four individually
-- **Panel style** — bars / letters+percentages / worst-pill, sized for
-  anything from thin vertical panels to wide panels
+- **Panel style** — rings / glow / capsule / dots / bars / letters+percentages /
+  worst-pill, sized for anything from thin vertical panels to wide panels
+- **Color theme** — presets (Warm, Sunset, Nord, Mono) or fully custom colors
 - Poll interval (default 15 minutes; these endpoints rate-limit hard)
 - Warning / critical thresholds
 - Normal / warning bar colors
